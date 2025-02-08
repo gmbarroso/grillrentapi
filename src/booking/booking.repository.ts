@@ -15,14 +15,19 @@ export class BookingRepository {
     return this.bookings;
   }
 
-  async findOne(id: number): Promise<Booking | null> {
+  async findOne(id: number): Promise<Booking> {
     const booking = this.bookings.find(booking => booking.id === id);
-    return booking || null;
+    if (!booking) {
+      throw new Error(`Booking with id ${id} not found`);
+    }
+    return booking;
   }
 
-  async update(id: number, booking: Partial<Booking>): Promise<Booking | null> {
+  async update(id: number, booking: Partial<Booking>): Promise<Booking> {
     const index = this.bookings.findIndex(booking => booking.id === id);
-    if (index === -1) return null;
+    if (index === -1) {
+      throw new Error(`Booking with id ${id} not found`);
+    }
     this.bookings[index] = { ...this.bookings[index], ...booking };
     return this.bookings[index];
   }

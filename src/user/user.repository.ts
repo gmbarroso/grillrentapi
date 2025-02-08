@@ -8,6 +8,7 @@ export class UserRepository {
   async create(user: Partial<User>): Promise<User> {
     const newUser = { id: Date.now(), ...user } as User;
     this.users.push(newUser);
+    console.log('Created user:', newUser);
     return newUser;
   }
 

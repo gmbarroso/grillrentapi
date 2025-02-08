@@ -4,6 +4,7 @@ import { User } from '../entities/user.entity';
 import { AuthService } from '../auth/auth.service';
 import { LocalAuthGuard } from '../auth/local-auth.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import * as bcrypt from 'bcrypt';
 
 @Controller('users')
 export class UserController {
@@ -14,12 +15,17 @@ export class UserController {
 
   @Post('register')
   async register(@Body() createUserDto: Partial<User>) {
-    return this.userService.create(createUserDto);
+    console.log('User object before saving:', createUserDto);
+    const createdUser = await this.userService.create(createUserDto);
+    console.log('Created user:', createdUser);
+    return createdUser;
   }
 
   @UseGuards(LocalAuthGuard)
   @Post('login')
   async login(@Request() req) {
+    console.log('User logged in:', req.user);
+    console.log('Provided password in controller:', req.body.password);
     return this.authService.login(req.user);
   }
 
@@ -32,6 +38,7 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   @Get(':id')
   async findOne(@Param('id') id: number) {
+    console.log('Getting user with id:', id);
     return this.userService.findOne(id);
   }
 

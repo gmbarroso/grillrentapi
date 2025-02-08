@@ -1,4 +1,4 @@
-import { Module } from '@nestjs.common';
+import { Module } from '@nestjs/common';
 import { ResourceService } from './resource.service';
 import { ResourceController } from './resource.controller';
 import { ResourceRepository } from './resource.repository';
