@@ -14,7 +14,7 @@ export class UserController {
 
   @Post('register')
   async register(@Body(new JoiValidationPipe(CreateUserSchema)) createUserDto: CreateUserDto) {
-    this.logger.log(`Call register user endpoint: ${createUserDto.username}`);
+    this.logger.log(`Register endpoint called for user: ${createUserDto.username}`);
     return this.userService.register(createUserDto);
   }
 
