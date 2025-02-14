@@ -28,11 +28,11 @@ export class BookingService {
     }
 
     // Verificar disponibilidade
-    const isAvailable = await this.availabilityService.checkAvailability(
-      createBookingDto.resourceId,
-      new Date(createBookingDto.startTime),
-      new Date(createBookingDto.endTime),
-    );
+    const isAvailable = await this.availabilityService.checkAvailability({
+      resourceId: createBookingDto.resourceId,
+      startTime: new Date(createBookingDto.startTime),
+      endTime: new Date(createBookingDto.endTime),
+    });
 
     if (!isAvailable.available) {
       this.logger.warn(`Resource ID: ${createBookingDto.resourceId} is not available from ${createBookingDto.startTime} to ${createBookingDto.endTime}`);

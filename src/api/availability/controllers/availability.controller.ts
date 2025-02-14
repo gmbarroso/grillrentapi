@@ -1,5 +1,7 @@
-import { Controller, Get, Param, Query, Logger, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, Logger } from '@nestjs/common';
 import { AvailabilityService } from '../services/availability.service';
+import { CheckAvailabilityDto, CheckAvailabilitySchema } from '../dto/check-availability.dto';
+import { JoiValidationPipe } from '../../../shared/pipes/joi-validation.pipe';
 
 @Controller('availability')
 export class AvailabilityController {
@@ -7,22 +9,9 @@ export class AvailabilityController {
 
   constructor(private readonly availabilityService: AvailabilityService) {}
 
-  @Get(':resourceId')
-  async checkAvailability(
-    @Param('resourceId') resourceId: string,
-    @Query('startTime') startTime: string,
-    @Query('endTime') endTime: string,
-  ) {
-    this.logger.log(`Checking availability for resource ID: ${resourceId}`);
-
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      this.logger.warn(`Invalid date format for startTime or endTime`);
-      throw new BadRequestException('Invalid date format for startTime or endTime');
-    }
-
-    return this.availabilityService.checkAvailability(resourceId, start, end);
+  @Post()
+  async checkAvailability(@Body(new JoiValidationPipe(CheckAvailabilitySchema)) checkAvailabilityDto: CheckAvailabilityDto) {
+    this.logger.log(`Checking availability for resource ID: ${checkAvailabilityDto.resourceId}`);
+    return this.availabilityService.checkAvailability(checkAvailabilityDto);
   }
 }

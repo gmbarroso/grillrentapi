@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateResourceDto } from '../dto/create-resource.dto';
+import { UpdateResourceDto } from '../dto/update-resource.dto';
 import { Resource } from '../entities/resource.entity';
 
 @Injectable()
@@ -28,6 +29,31 @@ export class ResourceService {
 
   async findOne(resourceId: number) {
     this.logger.log(`Fetching resource ID: ${resourceId}`);
-    return this.resourceRepository.findOne({ where: { id: resourceId } });
+    const resource = await this.resourceRepository.findOne({ where: { id: resourceId } });
+    if (!resource) {
+      throw new NotFoundException('Resource not found');
+    }
+    return resource;
+  }
+
+  async update(id: number, updateResourceDto: UpdateResourceDto) {
+    const resource = await this.resourceRepository.findOne({ where: { id } });
+    if (!resource) {
+      throw new NotFoundException('Resource not found');
+    }
+    const updatedResource = Object.assign(resource, updateResourceDto);
+    await this.resourceRepository.save(updatedResource);
+    this.logger.log(`Resource updated successfully: ${updatedResource.id}`);
+    return { message: 'Resource updated successfully', resource: updatedResource };
+  }
+
+  async remove(id: number) {
+    const resource = await this.resourceRepository.findOne({ where: { id } });
+    if (!resource) {
+      throw new NotFoundException('Resource not found');
+    }
+    await this.resourceRepository.remove(resource);
+    this.logger.log(`Resource removed successfully: ${id}`);
+    return { message: 'Resource removed successfully' };
   }
 }
