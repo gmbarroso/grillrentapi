@@ -1,11 +1,11 @@
 import * as Joi from '@hapi/joi';
 
-export const LoginUserSchema = Joi.object({
-  username: Joi.string().required(),
-  password: Joi.string().required(),
-});
-
 export class LoginUserDto {
-  username: string;
+  name: string;
   password: string;
 }
+
+export const LoginUserSchema = Joi.object({
+  name: Joi.string().required(),
+  password: Joi.string().min(8).max(12).required(),
+});

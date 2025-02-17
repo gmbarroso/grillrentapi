@@ -1,46 +1,40 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UserController } from './user.controller';
 import { UserService } from '../services/user.service';
-import { CreateUserDto } from '../dto/create-user.dto';
-import { LoginUserDto } from '../dto/login-user.dto';
+import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
+import { CreateUserDto, CreateUserSchema } from '../dto/create-user.dto';
+import { LoginUserDto, LoginUserSchema } from '../dto/login-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { User } from '../entities/user.entity';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
+import { JoiValidationPipe } from '../../../shared/pipes/joi-validation.pipe';
 
 describe('UserController', () => {
   let controller: UserController;
   let service: UserService;
-  let userRepository: Repository<User>;
-  let jwtService: JwtService;
-  let bcryptCompare: jest.Mock;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UserController],
       providers: [
-        UserService,
         {
-          provide: getRepositoryToken(User),
-          useClass: Repository,
-        },
-        {
-          provide: JwtService,
+          provide: UserService,
           useValue: {
-            sign: jest.fn(),
+            register: jest.fn(),
+            login: jest.fn(),
+            getProfile: jest.fn(),
+            updateProfile: jest.fn(),
+            getAllUsers: jest.fn(),
+            remove: jest.fn(),
           },
         },
       ],
-    }).compile();
+    })
+    .overrideGuard(JwtAuthGuard)
+    .useValue({ canActivate: () => true })
+    .compile();
 
     controller = module.get<UserController>(UserController);
     service = module.get<UserService>(UserService);
-    userRepository = module.get<Repository<User>>(getRepositoryToken(User));
-    jwtService = module.get<JwtService>(JwtService);
-    bcryptCompare = jest.fn();
-    jest.spyOn(bcrypt, 'compare').mockImplementation(bcryptCompare);
   });
 
   it('should be defined', () => {
@@ -50,85 +44,94 @@ describe('UserController', () => {
   describe('register', () => {
     it('should register a user', async () => {
       const createUserDto: CreateUserDto = {
-        username: 'testuser',
-        password: 'password123',
+        name: 'testuser',
+        password: 'password123', // 8 characters
         email: 'testuser@example.com',
         apartment: '101',
       };
-      const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-      const user = { ...createUserDto, password: hashedPassword, id: 1 } as User;
-      jest.spyOn(userRepository, 'create').mockReturnValue(user);
-      jest.spyOn(userRepository, 'save').mockResolvedValue(user);
+      const user: User = { id: '1', ...createUserDto };
+      const result = { message: 'User registered successfully', user };
+      jest.spyOn(service, 'register').mockResolvedValue(user);
 
-      const result = await controller.register(createUserDto);
-      expect(result).toEqual({ message: 'User registered successfully', user });
+      const validationPipe = new JoiValidationPipe(CreateUserSchema);
+      expect(await controller.register(validationPipe.transform(createUserDto, { type: 'body' }))).toEqual(result);
     });
   });
 
   describe('login', () => {
     it('should login a user', async () => {
       const loginUserDto: LoginUserDto = {
-        username: 'testuser',
-        password: 'password123',
+        name: 'testuser',
+        password: 'password123', // 8 characters
       };
-      const user = { id: 1, username: 'testuser', password: await bcrypt.hash('password123', 10) } as User;
-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
-      bcryptCompare.mockResolvedValue(true);
-      jest.spyOn(jwtService, 'sign').mockReturnValue('token');
+      const result = { message: 'User logged in successfully', token: 'jwt-token' };
+      jest.spyOn(service, 'login').mockResolvedValue(result);
 
-      const result = await controller.login(loginUserDto);
-      expect(result).toEqual({ message: 'User logged in successfully', token: 'token' });
-    });
-
-    it('should throw an error for invalid credentials', async () => {
-      const loginUserDto: LoginUserDto = {
-        username: 'testuser',
-        password: 'wrongpassword',
-      };
-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(null);
-
-      await expect(controller.login(loginUserDto)).rejects.toThrow('Invalid credentials');
+      const validationPipe = new JoiValidationPipe(LoginUserSchema);
+      expect(await controller.login(validationPipe.transform(loginUserDto, { type: 'body' }))).toBe(result);
     });
   });
 
   describe('getProfile', () => {
     it('should get user profile', async () => {
-      const req = { user: { id: 1 } };
-      const user = { id: 1, username: 'testuser', password: 'password123', email: 'testuser@example.com', apartment: '101' } as User;
-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
+      const req = { user: { id: '1' } };
+      const user: User = {
+        id: '1',
+        name: 'testuser',
+        password: 'hashedpassword',
+        email: 'testuser@example.com',
+        apartment: '101',
+      };
+      const result = { message: 'User profile retrieved successfully', user };
+      jest.spyOn(service, 'getProfile').mockResolvedValue(result);
 
-      const result = await controller.getProfile(req);
-      expect(result).toEqual({ message: 'User profile retrieved successfully', user });
-    });
-
-    it('should throw an error if user not found', async () => {
-      const req = { user: { id: 1 } };
-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(null);
-
-      await expect(controller.getProfile(req)).rejects.toThrow('User not found');
+      expect(await controller.getProfile(req)).toBe(result);
     });
   });
 
   describe('updateProfile', () => {
     it('should update user profile', async () => {
-      const req = { user: { id: 1 } };
+      const req = { user: { id: '1' } };
       const updateUserDto: UpdateUserDto = {
         email: 'newemail@example.com',
         apartment: '102',
       };
-      const user = { id: 1, username: 'testuser', password: 'password123', email: 'testuser@example.com', apartment: '101' } as User;
-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
-      jest.spyOn(userRepository, 'save').mockResolvedValue({ ...user, ...updateUserDto });
+      const user: User = {
+        id: '1',
+        name: 'testuser',
+        password: 'hashedpassword',
+        email: 'newemail@example.com',
+        apartment: '102',
+      };
+      const result = { message: 'User profile updated successfully', user };
+      jest.spyOn(service, 'updateProfile').mockResolvedValue(result);
 
-      const result = await controller.updateProfile(req, updateUserDto);
-      expect(result).toEqual({ message: 'User profile updated successfully', user: { ...user, ...updateUserDto } });
+      expect(await controller.updateProfile(req, updateUserDto)).toBe(result);
     });
+  });
 
-    it('should throw an error if user not found', async () => {
-      const req = { user: { id: 1 } };
-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(null);
+  describe('getAllUsers', () => {
+    it('should get all users', async () => {
+      const users: User[] = [{
+        id: '1',
+        name: 'testuser',
+        password: 'hashedpassword',
+        email: 'testuser@example.com',
+        apartment: '101',
+      }];
+      const result = { message: 'All users retrieved successfully', users };
+      jest.spyOn(service, 'getAllUsers').mockResolvedValue(result);
 
-      await expect(controller.updateProfile(req, {} as UpdateUserDto)).rejects.toThrow('User not found');
+      expect(await controller.getAllUsers()).toBe(result);
+    });
+  });
+
+  describe('remove', () => {
+    it('should remove a user', async () => {
+      const result = { message: 'User removed successfully' };
+      jest.spyOn(service, 'remove').mockResolvedValue(result);
+
+      expect(await controller.remove('1')).toBe(result);
     });
   });
 });

@@ -1,9 +1,13 @@
-import { Controller, Post, Get, Delete, Param, Body, UseGuards, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Logger, Get, Param, Delete, UseGuards, Req, Query } from '@nestjs/common';
 import { BookingService } from '../services/booking.service';
-import { CreateBookingDto, CreateBookingSchema } from '../dto/create-booking.dto';
-import { JoiValidationPipe } from '../../../shared/pipes/joi-validation.pipe';
+import { CreateBookingDto } from '../dto/create-booking.dto';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
-import { User } from '../../../shared/auth/decorators/user.decorator';
+import { Request } from 'express';
+import { User } from '../../user/entities/user.entity';
+
+interface AuthenticatedRequest extends Request {
+  user: User;
+}
 
 @Controller('bookings')
 export class BookingController {
@@ -13,9 +17,10 @@ export class BookingController {
 
   @UseGuards(JwtAuthGuard)
   @Post()
-  async create(@Body(new JoiValidationPipe(CreateBookingSchema)) createBookingDto: CreateBookingDto, @User() user) {
-    this.logger.log(`Creating booking for user ID: ${user.id}`);
-    return this.bookingService.create(createBookingDto, user.id);
+  async create(@Body() createBookingDto: CreateBookingDto, @Req() req: AuthenticatedRequest) {
+    const userId = req.user.id.toString();
+    this.logger.log(`Creating booking for user ID: ${userId}`);
+    return this.bookingService.create(createBookingDto, userId);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -26,9 +31,26 @@ export class BookingController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Delete(':bookingId')
-  async remove(@Param('bookingId') bookingId: string) {
-    this.logger.log(`Removing booking ID: ${bookingId}`);
-    return this.bookingService.remove(bookingId);
+  @Get()
+  async findAll() {
+    this.logger.log('Fetching all bookings');
+    return this.bookingService.findAll();
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id')
+  async remove(@Param('id') id: string) {
+    this.logger.log(`Removing booking ID: ${id}`);
+    return this.bookingService.remove(id);
+  }
+
+  @Get('availability/:resourceId')
+  async checkAvailability(
+    @Param('resourceId') resourceId: string,
+    @Query('startTime') startTime: string,
+    @Query('endTime') endTime: string
+  ) {
+    this.logger.log(`Checking availability for resource ID: ${resourceId} from ${startTime} to ${endTime}`);
+    return this.bookingService.checkAvailability(resourceId, new Date(startTime), new Date(endTime));
   }
 }

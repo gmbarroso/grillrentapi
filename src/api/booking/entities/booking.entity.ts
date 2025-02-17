@@ -1,19 +1,29 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { User } from '../../user/entities/user.entity';
+import { Resource } from '../../resource/entities/resource.entity';
 
 @Entity()
 export class Booking {
-  @PrimaryGeneratedColumn()
-  id!: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column()
-  userId!: string;
+  resourceId: string;
 
   @Column()
-  resourceId!: string;
+  startTime: Date;
 
   @Column()
-  startTime!: Date;
+  endTime: Date;
 
   @Column()
-  endTime!: Date;
+  userId: string;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'userId' })
+  user: User;
+
+  @ManyToOne(() => Resource)
+  @JoinColumn({ name: 'resourceId' })
+  resource: Resource;
 }

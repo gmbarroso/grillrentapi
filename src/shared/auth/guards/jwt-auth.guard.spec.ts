@@ -25,7 +25,7 @@ describe('JwtAuthGuard', () => {
 
   describe('handleRequest', () => {
     it('should return user if no error and user is present', () => {
-      const user = { id: 1, username: 'testuser' };
+      const user = { id: 1, name: 'testuser' };
       const result = guard.handleRequest(null, user, null);
       expect(result).toBe(user);
     });

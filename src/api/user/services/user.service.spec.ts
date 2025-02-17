@@ -2,18 +2,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UserService } from './user.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { User } from '../entities/user.entity';
-import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
+import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { CreateUserDto } from '../dto/create-user.dto';
-import { LoginUserDto } from '../dto/login-user.dto';
-import { UpdateUserDto } from '../dto/update-user.dto';
+import { ConflictException, UnauthorizedException, NotFoundException } from '@nestjs/common';
 
 describe('UserService', () => {
   let service: UserService;
-  let userRepository: Repository<User>;
+  let repository: Repository<User>;
   let jwtService: JwtService;
-  let bcryptCompare: jest.Mock;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -26,17 +23,15 @@ describe('UserService', () => {
         {
           provide: JwtService,
           useValue: {
-            sign: jest.fn(),
+            sign: jest.fn().mockReturnValue('jwt-token'),
           },
         },
       ],
     }).compile();
 
     service = module.get<UserService>(UserService);
-    userRepository = module.get<Repository<User>>(getRepositoryToken(User));
+    repository = module.get<Repository<User>>(getRepositoryToken(User));
     jwtService = module.get<JwtService>(JwtService);
-    bcryptCompare = jest.fn();
-    jest.spyOn(bcrypt, 'compare').mockImplementation(bcryptCompare);
   });
 
   it('should be defined', () => {
@@ -45,82 +40,144 @@ describe('UserService', () => {
 
   describe('register', () => {
     it('should register a user', async () => {
-      const createUserDto: CreateUserDto = {
-        username: 'testuser',
+      const createUserDto = {
+        name: 'testuser',
         password: 'password123',
         email: 'testuser@example.com',
         apartment: '101',
       };
-      const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-      const user = { ...createUserDto, password: hashedPassword, id: 1 } as User;
-      jest.spyOn(userRepository, 'create').mockReturnValue(user);
-      jest.spyOn(userRepository, 'save').mockResolvedValue(user);
+      const user = { id: '1', ...createUserDto, password: 'hashedpassword' };
+      jest.spyOn(repository, 'findOne').mockResolvedValue(null);
+      jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashedpassword' as never);
+      jest.spyOn(repository, 'create').mockReturnValue(user as any);
+      jest.spyOn(repository, 'save').mockResolvedValue(user as any);
 
-      const result = await service.register(createUserDto);
-      expect(result).toEqual({ message: 'User registered successfully', user });
+      expect(await service.register(createUserDto)).toEqual(user);
+    });
+
+    it('should throw a ConflictException if name, email, or apartment already exists', async () => {
+      const createUserDto = {
+        name: 'testuser',
+        password: 'password123',
+        email: 'testuser@example.com',
+        apartment: '101',
+      };
+      jest.spyOn(repository, 'findOne').mockResolvedValue(createUserDto as any);
+
+      await expect(service.register(createUserDto)).rejects.toThrow(ConflictException);
     });
   });
 
   describe('login', () => {
     it('should login a user', async () => {
-      const loginUserDto: LoginUserDto = {
-        username: 'testuser',
+      const loginUserDto = {
+        name: 'testuser',
         password: 'password123',
       };
-      const user = { id: 1, username: 'testuser', password: await bcrypt.hash('password123', 10) } as User;
-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
-      bcryptCompare.mockResolvedValue(true);
-      jest.spyOn(jwtService, 'sign').mockReturnValue('token');
+      const user = { id: '1', ...loginUserDto, password: 'hashedpassword' };
+      jest.spyOn(repository, 'findOne').mockResolvedValue(user as any);
+      jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
 
-      const result = await service.login(loginUserDto);
-      expect(result).toEqual({ message: 'User logged in successfully', token: 'token' });
+      expect(await service.login(loginUserDto)).toEqual({ message: 'User logged in successfully', token: 'jwt-token' });
     });
 
-    it('should throw an error for invalid credentials', async () => {
-      const loginUserDto: LoginUserDto = {
-        username: 'testuser',
-        password: 'wrongpassword',
+    it('should throw an UnauthorizedException if credentials are invalid', async () => {
+      const loginUserDto = {
+        name: 'testuser',
+        password: 'password123',
       };
-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(null);
+      jest.spyOn(repository, 'findOne').mockResolvedValue(null);
 
-      await expect(service.login(loginUserDto)).rejects.toThrow('Invalid credentials');
+      await expect(service.login(loginUserDto)).rejects.toThrow(UnauthorizedException);
     });
   });
 
   describe('getProfile', () => {
     it('should get user profile', async () => {
-      const user = { id: 1, username: 'testuser', password: 'password123', email: 'testuser@example.com', apartment: '101' } as User;
-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
+      const user = {
+        id: '1',
+        name: 'testuser',
+        password: 'hashedpassword',
+        email: 'testuser@example.com',
+        apartment: '101',
+      };
+      jest.spyOn(repository, 'findOne').mockResolvedValue(user as any);
 
-      const result = await service.getProfile('1');
-      expect(result).toEqual({ message: 'User profile retrieved successfully', user });
+      expect(await service.getProfile('1')).toEqual({ message: 'User profile retrieved successfully', user });
     });
 
-    it('should throw an error if user not found', async () => {
-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(null);
+    it('should throw an UnauthorizedException if user is not found', async () => {
+      jest.spyOn(repository, 'findOne').mockResolvedValue(null);
 
-      await expect(service.getProfile('1')).rejects.toThrow('User not found');
+      await expect(service.getProfile('1')).rejects.toThrow(UnauthorizedException);
     });
   });
 
   describe('updateProfile', () => {
     it('should update user profile', async () => {
-      const updateUserDto: UpdateUserDto = {
+      const updateUserDto = {
         email: 'newemail@example.com',
         apartment: '102',
       };
-      const user = { id: 1, username: 'testuser', password: 'password123', email: 'testuser@example.com', apartment: '101' } as User;
-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(user);
-      jest.spyOn(userRepository, 'save').mockResolvedValue({ ...user, ...updateUserDto });
+      const user = {
+        id: '1',
+        name: 'testuser',
+        password: 'hashedpassword',
+        email: 'testuser@example.com',
+        apartment: '101',
+      };
+      const updatedUser = { ...user, ...updateUserDto };
+      jest.spyOn(repository, 'findOne').mockResolvedValue(user as any);
+      jest.spyOn(repository, 'save').mockResolvedValue(updatedUser as any);
 
-      const result = await service.updateProfile('1', updateUserDto);
-      expect(result).toEqual({ message: 'User profile updated successfully', user: { ...user, ...updateUserDto } });
+      expect(await service.updateProfile('1', updateUserDto)).toEqual({ message: 'User profile updated successfully', user: updatedUser });
     });
 
-    it('should throw an error if user not found', async () => {
-      jest.spyOn(userRepository, 'findOne').mockResolvedValue(null);
+    it('should throw an UnauthorizedException if user is not found', async () => {
+      const updateUserDto = {
+        email: 'newemail@example.com',
+        apartment: '102',
+      };
+      jest.spyOn(repository, 'findOne').mockResolvedValue(null);
 
-      await expect(service.updateProfile('1', {} as UpdateUserDto)).rejects.toThrow('User not found');
+      await expect(service.updateProfile('1', updateUserDto)).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('getAllUsers', () => {
+    it('should get all users', async () => {
+      const users = [{
+        id: '1',
+        name: 'testuser',
+        password: 'hashedpassword',
+        email: 'testuser@example.com',
+        apartment: '101',
+      }];
+      jest.spyOn(repository, 'find').mockResolvedValue(users as any);
+
+      expect(await service.getAllUsers()).toEqual({ message: 'All users retrieved successfully', users });
+    });
+  });
+
+  describe('remove', () => {
+    it('should remove a user', async () => {
+      const user = {
+        id: '1',
+        name: 'testuser',
+        password: 'hashedpassword',
+        email: 'testuser@example.com',
+        apartment: '101',
+      };
+      jest.spyOn(repository, 'findOne').mockResolvedValue(user as any);
+      jest.spyOn(repository, 'remove').mockResolvedValue(user as any);
+
+      expect(await service.remove('1')).toEqual({ message: 'User removed successfully' });
+    });
+
+    it('should throw a NotFoundException if user is not found', async () => {
+      jest.spyOn(repository, 'findOne').mockResolvedValue(null);
+
+      await expect(service.remove('1')).rejects.toThrow(NotFoundException);
     });
   });
 });

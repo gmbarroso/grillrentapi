@@ -6,7 +6,7 @@
   },
   "item": [
     {
-      "name": "User",
+      "name": "Users",
       "item": [
         {
           "name": "Register User",
@@ -20,16 +20,15 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"testuser\",\n  \"password\": \"password123\",\n  \"email\": \"testuser@example.com\",\n  \"apartment\": \"101\"\n}"
+              "raw": "{\n  \"name\": \"testuser\",\n  \"password\": \"password123\",\n  \"email\": \"testuser@example.com\",\n  \"apartment\": \"101\"\n}"
             },
             "url": {
-              "raw": "http://localhost:3000/users/register",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "3000",
+              "raw": "{{baseUrl}}/users/register",
+              "host": ["{{baseUrl}}"],
               "path": ["users", "register"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Login User",
@@ -43,16 +42,15 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"username\": \"testuser\",\n  \"password\": \"password123\"\n}"
+              "raw": "{\n  \"name\": \"testuser\",\n  \"password\": \"password123\"\n}"
             },
             "url": {
-              "raw": "http://localhost:3000/users/login",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "3000",
+              "raw": "{{baseUrl}}/users/login",
+              "host": ["{{baseUrl}}"],
               "path": ["users", "login"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get User Profile",
@@ -65,13 +63,12 @@
               }
             ],
             "url": {
-              "raw": "http://localhost:3000/users/profile",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "3000",
+              "raw": "{{baseUrl}}/users/profile",
+              "host": ["{{baseUrl}}"],
               "path": ["users", "profile"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Update User Profile",
@@ -89,31 +86,64 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"newemail@example.com\"\n}"
+              "raw": "{\n  \"email\": \"newemail@example.com\",\n  \"apartment\": \"102\"\n}"
             },
             "url": {
-              "raw": "http://localhost:3000/users/profile",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "3000",
+              "raw": "{{baseUrl}}/users/profile",
+              "host": ["{{baseUrl}}"],
               "path": ["users", "profile"]
             }
-          }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":id"]
+            }
+          },
+          "response": []
         }
       ]
     },
     {
-      "name": "Resource",
+      "name": "Resources",
       "item": [
         {
           "name": "Get Resources",
           "request": {
             "method": "GET",
             "url": {
-              "raw": "http://localhost:3000/resources",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "3000",
+              "raw": "{{baseUrl}}/resources",
+              "host": ["{{baseUrl}}"],
               "path": ["resources"]
             }
           }
@@ -130,21 +160,78 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Grill\",\n  \"type\": \"grill\",\n  \"description\": \"A nice grill\"\n}"
+              "raw": "{\n  \"name\": \"Tennis Court\",\n  \"type\": \"tennis\",\n  \"description\": \"A nice tennis court\"\n}"
             },
             "url": {
-              "raw": "http://localhost:3000/resources",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "3000",
+              "raw": "{{baseUrl}}/resources",
+              "host": ["{{baseUrl}}"],
               "path": ["resources"]
             }
-          }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Resources",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/resources",
+              "host": ["{{baseUrl}}"],
+              "path": ["resources"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Resource",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/resources/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["resources", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Resource",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Tennis Court\",\n  \"type\": \"tennis\",\n  \"description\": \"An updated nice tennis court\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/resources/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["resources", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Resource",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/resources/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["resources", "1"]
+            }
+          },
+          "response": []
         }
       ]
     },
     {
-      "name": "Booking",
+      "name": "Bookings",
       "item": [
         {
           "name": "Create Booking",
@@ -165,13 +252,12 @@
               "raw": "{\n  \"resourceId\": \"1\",\n  \"startTime\": \"2025-02-12T10:00:00Z\",\n  \"endTime\": \"2025-02-12T12:00:00Z\"\n}"
             },
             "url": {
-              "raw": "http://localhost:3000/bookings",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "3000",
+              "raw": "{{baseUrl}}/bookings",
+              "host": ["{{baseUrl}}"],
               "path": ["bookings"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get Bookings by User",
@@ -184,13 +270,30 @@
               }
             ],
             "url": {
-              "raw": "http://localhost:3000/bookings/user/1",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "3000",
+              "raw": "{{baseUrl}}/bookings/user/1",
+              "host": ["{{baseUrl}}"],
               "path": ["bookings", "user", "1"]
             }
-          }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Bookings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bookings",
+              "host": ["{{baseUrl}}"],
+              "path": ["bookings"]
+            }
+          },
+          "response": []
         },
         {
           "name": "Delete Booking",
@@ -203,31 +306,34 @@
               }
             ],
             "url": {
-              "raw": "http://localhost:3000/bookings/1",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "3000",
+              "raw": "{{baseUrl}}/bookings/1",
+              "host": ["{{baseUrl}}"],
               "path": ["bookings", "1"]
             }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Availability",
-      "item": [
+          },
+          "response": []
+        },
         {
-          "name": "Get Availability by Resource",
+          "name": "Check Availability",
           "request": {
             "method": "GET",
             "url": {
-              "raw": "http://localhost:3000/availability/1",
-              "protocol": "http",
-              "host": ["localhost"],
-              "port": "3000",
-              "path": ["availability", "1"]
+              "raw": "{{baseUrl}}/bookings/availability/1?startTime=2025-02-12T10:00:00Z&endTime=2025-02-12T12:00:00Z",
+              "host": ["{{baseUrl}}"],
+              "path": ["bookings", "availability", "1"],
+              "query": [
+                {
+                  "key": "startTime",
+                  "value": "2025-02-12T10:00:00Z"
+                },
+                {
+                  "key": "endTime",
+                  "value": "2025-02-12T12:00:00Z"
+                }
+              ]
             }
-          }
+          },
+          "response": []
         }
       ]
     }

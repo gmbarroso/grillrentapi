@@ -8,7 +8,7 @@ describe('JoiValidationPipe', () => {
 
   beforeEach(() => {
     schema = Joi.object({
-      username: Joi.string().required(),
+      name: Joi.string().required(),
       password: Joi.string().min(8).required(),
     });
     pipe = new JoiValidationPipe(schema);
@@ -19,14 +19,14 @@ describe('JoiValidationPipe', () => {
   });
 
   it('should validate and return the value if valid', () => {
-    const value = { username: 'testuser', password: 'password123' };
+    const value = { name: 'testuser', password: 'password' }; // 8 characters
     const metadata: ArgumentMetadata = { type: 'body', metatype: Object, data: '' };
 
     expect(pipe.transform(value, metadata)).toEqual(value);
   });
 
   it('should throw a BadRequestException if validation fails', () => {
-    const value = { username: 'testuser', password: 'short' };
+    const value = { name: 'testuser', password: 'short' }; // less than 8 characters
     const metadata: ArgumentMetadata = { type: 'body', metatype: Object, data: '' };
 
     expect(() => pipe.transform(value, metadata)).toThrow(BadRequestException);

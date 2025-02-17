@@ -5,10 +5,11 @@ import { Resource } from '../entities/resource.entity';
 import { Repository } from 'typeorm';
 import { CreateResourceDto } from '../dto/create-resource.dto';
 import { UpdateResourceDto } from '../dto/update-resource.dto';
+import { NotFoundException } from '@nestjs/common';
 
 describe('ResourceService', () => {
   let service: ResourceService;
-  let resourceRepository: Repository<Resource>;
+  let repository: Repository<Resource>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -22,7 +23,7 @@ describe('ResourceService', () => {
     }).compile();
 
     service = module.get<ResourceService>(ResourceService);
-    resourceRepository = module.get<Repository<Resource>>(getRepositoryToken(Resource));
+    repository = module.get<Repository<Resource>>(getRepositoryToken(Resource));
   });
 
   it('should be defined', () => {
@@ -32,84 +33,93 @@ describe('ResourceService', () => {
   describe('create', () => {
     it('should create a resource', async () => {
       const createResourceDto: CreateResourceDto = {
-        name: 'Tennis Court',
-        type: 'tennis',
-        description: 'A nice tennis court',
+        name: 'Test Resource',
+        type: 'Test Type',
+        description: 'Test Description',
       };
-      const resource = { ...createResourceDto, id: 1 } as Resource;
-      jest.spyOn(resourceRepository, 'create').mockReturnValue(resource);
-      jest.spyOn(resourceRepository, 'save').mockResolvedValue(resource);
+      const resource: Resource = { id: '1', ...createResourceDto, bookings: [] };
+      const result = { message: 'Resource created successfully', resource };
 
-      const result = await service.create(createResourceDto);
-      expect(result).toEqual({ message: 'Resource created successfully', resource });
+      jest.spyOn(repository, 'create').mockReturnValue(resource as any);
+      jest.spyOn(repository, 'save').mockResolvedValue(resource as any);
+
+      expect(await service.create(createResourceDto)).toEqual(result);
     });
   });
 
   describe('findAll', () => {
-    it('should return an array of resources', async () => {
-      const resources = [
-        { id: 1, name: 'Tennis Court', type: 'tennis', description: 'A nice tennis court' },
-        { id: 2, name: 'Swimming Pool', type: 'swimming', description: 'A large swimming pool' },
-      ] as Resource[];
-      jest.spyOn(resourceRepository, 'find').mockResolvedValue(resources);
+    it('should find all resources', async () => {
+      const resources: Resource[] = [
+        { id: '1', name: 'Test Resource 1', type: 'Test Type 1', description: 'Test Description 1', bookings: [] },
+        { id: '2', name: 'Test Resource 2', type: 'Test Type 2', description: 'Test Description 2', bookings: [] },
+      ];
 
-      const result = await service.findAll();
-      expect(result).toEqual(resources);
+      jest.spyOn(repository, 'find').mockResolvedValue(resources as any);
+
+      expect(await service.findAll()).toEqual(resources);
     });
   });
 
   describe('findOne', () => {
-    it('should return a resource', async () => {
-      const resource = { id: 1, name: 'Tennis Court', type: 'tennis', description: 'A nice tennis court' } as Resource;
-      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue(resource);
+    it('should find one resource', async () => {
+      const resource: Resource = { id: '1', name: 'Test Resource', type: 'Test Type', description: 'Test Description', bookings: [] };
 
-      const result = await service.findOne(1);
-      expect(result).toEqual(resource);
+      jest.spyOn(repository, 'findOne').mockResolvedValue(resource as any);
+
+      expect(await service.findOne('1')).toEqual(resource);
     });
 
-    it('should throw an error if resource not found', async () => {
-      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue(null);
+    it('should throw a NotFoundException if resource not found', async () => {
+      jest.spyOn(repository, 'findOne').mockResolvedValue(null);
 
-      await expect(service.findOne(1)).rejects.toThrow('Resource not found');
+      await expect(service.findOne('1')).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('update', () => {
     it('should update a resource', async () => {
       const updateResourceDto: UpdateResourceDto = {
-        name: 'Updated Tennis Court',
-        type: 'tennis',
-        description: 'An updated nice tennis court',
+        name: 'Updated Resource',
+        type: 'Updated Type',
+        description: 'Updated Description',
       };
-      const resource = { id: 1, name: 'Tennis Court', type: 'tennis', description: 'A nice tennis court' } as Resource;
-      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue(resource);
-      jest.spyOn(resourceRepository, 'save').mockResolvedValue({ ...resource, ...updateResourceDto });
+      const resource: Resource = { 
+        id: '1', 
+        name: updateResourceDto.name || 'Default Name', 
+        type: updateResourceDto.type || 'Default Type', 
+        description: updateResourceDto.description || 'Default Description', 
+        bookings: [] 
+      };
+      const result = { message: 'Resource updated successfully', resource };
 
-      const result = await service.update(1, updateResourceDto);
-      expect(result).toEqual({ message: 'Resource updated successfully', resource: { ...resource, ...updateResourceDto } });
+      jest.spyOn(repository, 'findOne').mockResolvedValue(resource as any);
+      jest.spyOn(repository, 'save').mockResolvedValue(resource as any);
+
+      expect(await service.update('1', updateResourceDto)).toEqual(result);
     });
 
-    it('should throw an error if resource not found', async () => {
-      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue(null);
+    it('should throw a NotFoundException if resource not found', async () => {
+      jest.spyOn(repository, 'findOne').mockResolvedValue(null);
 
-      await expect(service.update(1, {} as UpdateResourceDto)).rejects.toThrow('Resource not found');
+      await expect(service.update('1', {} as UpdateResourceDto)).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('remove', () => {
     it('should remove a resource', async () => {
-      const resource = { id: 1, name: 'Tennis Court', type: 'tennis', description: 'A nice tennis court' } as Resource;
-      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue(resource);
-      jest.spyOn(resourceRepository, 'remove').mockResolvedValue(resource);
+      const resource: Resource = { id: '1', name: 'Test Resource', type: 'Test Type', description: 'Test Description', bookings: [] };
+      const result = { message: 'Resource removed successfully' };
 
-      const result = await service.remove(1);
-      expect(result).toEqual({ message: 'Resource removed successfully' });
+      jest.spyOn(repository, 'findOne').mockResolvedValue(resource as any);
+      jest.spyOn(repository, 'remove').mockResolvedValue(resource as any);
+
+      expect(await service.remove('1')).toEqual(result);
     });
 
-    it('should throw an error if resource not found', async () => {
-      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue(null);
+    it('should throw a NotFoundException if resource not found', async () => {
+      jest.spyOn(repository, 'findOne').mockResolvedValue(null);
 
-      await expect(service.remove(1)).rejects.toThrow('Resource not found');
+      await expect(service.remove('1')).rejects.toThrow(NotFoundException);
     });
   });
 });
