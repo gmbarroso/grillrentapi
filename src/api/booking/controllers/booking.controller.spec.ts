@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BookingController } from './booking.controller';
 import { BookingService } from '../services/booking.service';
 import { CreateBookingDto } from '../dto/create-booking.dto';
+import { User, UserRole } from '../../user/entities/user.entity';
 import { Booking } from '../entities/booking.entity';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 
@@ -53,13 +54,14 @@ describe('BookingController', () => {
           name: 'Test User', 
           password: 'password', 
           email: 'test@example.com', 
-          apartment: '101' 
+          apartment: '101',
+          block: 1,
+          role: UserRole.RESIDENT
         }, 
         resource: {
           id: '1',
           name: 'Test Resource',
           type: 'Test Type',
-          description: 'Test Description', 
           bookings: [] 
         }
       };
@@ -86,13 +88,14 @@ describe('BookingController', () => {
             name: 'Test User', 
             password: 'password', 
             email: 'test@example.com', 
-            apartment: '101' 
+            apartment: '101',
+            block: 1,
+            role: UserRole.RESIDENT
           },
           resource: {
             id: '1',
             name: 'Test Resource',
             type: 'Test Type',
-            description: 'Test Description', 
             bookings: [] 
           }
         },
@@ -105,22 +108,32 @@ describe('BookingController', () => {
           user: { 
             id: '2', 
             name: 'Test User 2', 
-            password: 'password2', 
-            email: 'test2@example.com', 
-            apartment: '102' 
+            apartment: '102',
+            block: 1,
+            role: UserRole.RESIDENT,
+            email: 'test2@example.com',
+            password: 'password'
           },
           resource: {
             id: '2',
             name: 'Test Resource 2',
             type: 'Test Type 2',
-            description: 'Test Description 2', 
             bookings: [] 
           }
         },
       ];
-      jest.spyOn(service, 'findAll').mockResolvedValue(bookings);
+      const expectedBookings = bookings.map(booking => ({
+        id: booking.id,
+        resourceId: booking.resourceId,
+        resourceName: booking.resource.name,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        userId: booking.userId,
+        userApartment: booking.user.apartment,
+      }));
+      jest.spyOn(service, 'findAll').mockResolvedValue(expectedBookings);
 
-      expect(await controller.findAll()).toBe(bookings);
+      expect(await controller.findAll()).toEqual(expectedBookings);
     });
   });
 
@@ -134,24 +147,34 @@ describe('BookingController', () => {
           startTime: new Date(),
           endTime: new Date(),
           user: { 
-            id: '1', 
-            name: 'Test User', 
-            password: 'password', 
-            email: 'test@example.com', 
-            apartment: '101' 
+            id: '2', 
+            name: 'Test User 2', 
+            apartment: '102',
+            block: 1,
+            role: UserRole.RESIDENT,
+            email: 'test2@example.com',
+            password: 'password'
           },
           resource: {
             id: '1',
             name: 'Test Resource',
             type: 'Test Type',
-            description: 'Test Description', 
             bookings: [] 
           },
         },
       ];
-      jest.spyOn(service, 'findByUser').mockResolvedValue(bookings);
+      const expectedBookings = bookings.map(booking => ({
+        id: booking.id,
+        resourceId: booking.resourceId,
+        resourceName: booking.resource.name,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        userId: booking.userId,
+        userApartment: booking.user.apartment,
+      }));
+      jest.spyOn(service, 'findByUser').mockResolvedValue(expectedBookings);
 
-      expect(await controller.findByUser('1')).toBe(bookings);
+      expect(await controller.findByUser('1')).toEqual(expectedBookings);
     });
   });
 
@@ -160,7 +183,7 @@ describe('BookingController', () => {
       const result = { message: 'Booking removed successfully' };
       jest.spyOn(service, 'remove').mockResolvedValue(result);
 
-      expect(await controller.remove('1')).toBe(result);
+      expect(await controller.remove('1')).toEqual(result);
     });
   });
 

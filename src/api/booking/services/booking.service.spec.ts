@@ -5,7 +5,7 @@ import { Booking } from '../entities/booking.entity';
 import { Repository } from 'typeorm';
 import { CreateBookingDto } from '../dto/create-booking.dto';
 import { ResourceService } from '../../resource/services/resource.service';
-import { User } from '../../user/entities/user.entity';
+import { User, UserRole } from '../../user/entities/user.entity';
 import { Resource } from '../../resource/entities/resource.entity';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 
@@ -68,13 +68,14 @@ describe('BookingService', () => {
           name: 'Test User', 
           password: 'password', 
           email: 'test@example.com', 
-          apartment: '101' 
+          apartment: '101',
+          block: 1,
+          role: UserRole.RESIDENT
         }, 
         resource: {
           id: '1',
           name: 'Test Resource',
           type: 'Test Type',
-          description: 'Test Description', 
           bookings: [] 
         }
       };
@@ -158,13 +159,14 @@ describe('BookingService', () => {
             name: 'Test User', 
             password: 'password', 
             email: 'test@example.com', 
-            apartment: '101' 
-          },
+            apartment: '101',
+            block: 1,
+            role: UserRole.RESIDENT
+          }, 
           resource: {
             id: '1',
-            name: 'Test Resource',
+            name: "Test Resource",
             type: 'Test Type',
-            description: 'Test Description', 
             bookings: [] 
           }
         },
@@ -177,23 +179,33 @@ describe('BookingService', () => {
           user: { 
             id: '2', 
             name: 'Test User 2', 
-            password: 'password2', 
-            email: 'test2@example.com', 
-            apartment: '102' 
+            password: 'password',
+            apartment: '102',
+            block: 2,
+            role: UserRole.RESIDENT,
+            email: 'test2@example.com',
           },
           resource: {
             id: '2',
             name: 'Test Resource 2',
             type: 'Test Type 2',
-            description: 'Test Description 2', 
             bookings: [] 
           }
         }
       ];
+      const expectedBookings = bookings.map(booking => ({
+        id: booking.id,
+        resourceId: booking.resourceId,
+        resourceName: booking.resource.name,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        userId: booking.userId,
+        userApartment: booking.user.apartment,
+      }));
       jest.spyOn(bookingRepository, 'find').mockResolvedValue(bookings as any);
 
       const result = await service.findAll();
-      expect(result).toEqual(bookings);
+      expect(result).toEqual(expectedBookings);
     });
   });
 
@@ -211,21 +223,31 @@ describe('BookingService', () => {
             name: 'Test User', 
             password: 'password', 
             email: 'test@example.com', 
-            apartment: '101' 
-          },
+            apartment: '101',
+            block: 1,
+            role: UserRole.RESIDENT
+          }, 
           resource: {
             id: '1',
             name: 'Test Resource',
             type: 'Test Type',
-            description: 'Test Description', 
             bookings: [] 
           }
         }
       ];
+      const expectedBookings = bookings.map(booking => ({
+        id: booking.id,
+        resourceId: booking.resourceId,
+        resourceName: booking.resource.name,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        userId: booking.userId,
+        userApartment: booking.user.apartment,
+      }));
       jest.spyOn(bookingRepository, 'find').mockResolvedValue(bookings as any);
 
       const result = await service.findByUser('1');
-      expect(result).toEqual(bookings);
+      expect(result).toEqual(expectedBookings);
     });
   });
 
@@ -237,18 +259,19 @@ describe('BookingService', () => {
         userId: '1',
         startTime: new Date(),
         endTime: new Date(),
-        user: {
-          id: '1',
-          name: 'Test User',
-          password: 'password',
-          email: 'test@example.com',
-          apartment: '101'
-        },
+        user: { 
+          id: '1', 
+          name: 'Test User', 
+          password: 'password', 
+          email: 'test@example.com', 
+          apartment: '101',
+          block: 1,
+          role: UserRole.RESIDENT
+        }, 
         resource: {
           id: '1',
           name: 'Test Resource',
           type: 'Test Type',
-          description: 'Test Description',
           bookings: []
         }
       };
@@ -285,18 +308,19 @@ describe('BookingService', () => {
           userId: '1',
           startTime: new Date(),
           endTime: new Date(),
-          user: {
-            id: '1',
-            name: 'Test User',
-            password: 'password',
-            email: 'test@example.com',
-            apartment: '101'
-          },
+          user: { 
+            id: '1', 
+            name: 'Test User', 
+            password: 'password', 
+            email: 'test@example.com', 
+            apartment: '101',
+            block: 1,
+            role: UserRole.RESIDENT
+          }, 
           resource: {
             id: '1',
             name: 'Test Resource',
             type: 'Test Type',
-            description: 'Test Description',
             bookings: []
           }
         }

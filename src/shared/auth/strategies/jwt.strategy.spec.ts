@@ -1,22 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtModule } from '@nestjs/jwt';
-import { ConfigModule } from '@nestjs/config';
 
 describe('JwtStrategy', () => {
   let strategy: JwtStrategy;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      imports: [
-        ConfigModule.forRoot({
-          isGlobal: true,
-        }),
-        JwtModule.register({
-          secret: process.env.JWT_SECRET || 'defaultSecretKey',
-          signOptions: { expiresIn: '60s' },
-        }),
-      ],
+      imports: [JwtModule.register({ secret: 'testSecret' })],
       providers: [JwtStrategy],
     }).compile();
 
@@ -29,9 +20,9 @@ describe('JwtStrategy', () => {
 
   describe('validate', () => {
     it('should return the payload', async () => {
-      const payload = { sub: 1, name: 'testuser' };
+      const payload = { sub: '1', name: 'Test User', role: 'admin' };
       const result = await strategy.validate(payload);
-      expect(result).toEqual({ id: payload.sub, name: payload.name });
+      expect(result).toEqual({ id: '1', name: 'Test User', role: 'admin' });
     });
   });
 });
