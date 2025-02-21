@@ -1,21 +1,36 @@
 import { Entity, PrimaryGeneratedColumn, Column, Unique } from 'typeorm';
 
+export enum UserRole {
+  ADMIN = 'admin',
+  RESIDENT = 'resident',
+}
+
 @Entity()
 @Unique(['email'])
-@Unique(['apartment'])
+@Unique(['apartment', 'block'])
 export class User {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column()
-  name: string;
+  name!: string;
 
   @Column()
-  email: string;
+  email!: string;
 
   @Column()
-  password: string;
+  password!: string;
 
   @Column()
-  apartment: string;
+  apartment!: string;
+
+  @Column()
+  block!: number;
+
+  @Column({
+    type: 'enum',
+    enum: UserRole,
+    default: UserRole.RESIDENT,
+  })
+  role!: UserRole;
 }

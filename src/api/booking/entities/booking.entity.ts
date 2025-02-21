@@ -5,25 +5,25 @@ import { Resource } from '../../resource/entities/resource.entity';
 @Entity()
 export class Booking {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column()
-  resourceId: string;
+  resourceId!: string;
 
   @Column()
-  startTime: Date;
+  startTime!: Date;
 
   @Column()
-  endTime: Date;
+  endTime!: Date;
 
   @Column()
-  userId: string;
+  userId!: string;
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'userId' })
-  user: User;
+  user!: User;
 
   @ManyToOne(() => Resource)
   @JoinColumn({ name: 'resourceId' })
-  resource: Resource;
+  resource!: Resource;
 }

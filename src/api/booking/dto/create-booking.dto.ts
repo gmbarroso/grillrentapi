@@ -8,8 +8,8 @@ export const CreateBookingSchema = Joi.object({
 });
 
 export class CreateBookingDto {
-  resourceId: string;
-  userId: string;
-  startTime: Date;
-  endTime: Date;
+  resourceId!: string;
+  userId!: string;
+  startTime!: Date;
+  endTime!: Date;
 }

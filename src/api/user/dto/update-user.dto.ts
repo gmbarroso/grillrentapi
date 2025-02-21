@@ -5,6 +5,7 @@ export const UpdateUserSchema = Joi.object({
   password: Joi.string().min(8).optional(),
   email: Joi.string().email().optional(),
   apartment: Joi.string().optional(),
+  block: Joi.number().valid(1, 2).optional(),
 });
 
 export class UpdateUserDto {
@@ -12,4 +13,5 @@ export class UpdateUserDto {
   password?: string;
   email?: string;
   apartment?: string;
+  block?: number;
 }

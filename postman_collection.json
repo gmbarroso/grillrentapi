@@ -1,341 +1,151 @@
 {
   "info": {
-    "name": "GrillRentAPI",
-    "description": "Coleção de requisições para testar a API GrillRent",
+    "name": "GrillRentAPI User Endpoints",
+    "description": "Collection of User endpoints for GrillRentAPI",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "Users",
-      "item": [
-        {
-          "name": "Register User",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"testuser\",\n  \"password\": \"password123\",\n  \"email\": \"testuser@example.com\",\n  \"apartment\": \"101\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/register",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "register"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Login User",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"testuser\",\n  \"password\": \"password123\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "login"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get User Profile",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/users/profile",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "profile"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Update User Profile",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"newemail@example.com\",\n  \"apartment\": \"102\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/users/profile",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", "profile"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get All Users",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/users",
-              "host": ["{{baseUrl}}"],
-              "path": ["users"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Delete User",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/users/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["users", ":id"]
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Resources",
-      "item": [
-        {
-          "name": "Get Resources",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/resources",
-              "host": ["{{baseUrl}}"],
-              "path": ["resources"]
-            }
+      "name": "Register User",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
           }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"testuser\",\n  \"email\": \"testuser@example.com\",\n  \"password\": \"password123\",\n  \"apartment\": \"101\",\n  \"block\": 1,\n  \"role\": \"resident\"\n}"
         },
-        {
-          "name": "Create Resource",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Tennis Court\",\n  \"type\": \"tennis\",\n  \"description\": \"A nice tennis court\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/resources",
-              "host": ["{{baseUrl}}"],
-              "path": ["resources"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get All Resources",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/resources",
-              "host": ["{{baseUrl}}"],
-              "path": ["resources"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get Resource",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/resources/1",
-              "host": ["{{baseUrl}}"],
-              "path": ["resources", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Update Resource",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated Tennis Court\",\n  \"type\": \"tennis\",\n  \"description\": \"An updated nice tennis court\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/resources/1",
-              "host": ["{{baseUrl}}"],
-              "path": ["resources", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Delete Resource",
-          "request": {
-            "method": "DELETE",
-            "url": {
-              "raw": "{{baseUrl}}/resources/1",
-              "host": ["{{baseUrl}}"],
-              "path": ["resources", "1"]
-            }
-          },
-          "response": []
+        "url": {
+          "raw": "http://localhost:3000/api/users/register",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "users", "register"]
         }
-      ]
+      },
+      "response": []
     },
     {
-      "name": "Bookings",
-      "item": [
-        {
-          "name": "Create Booking",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"resourceId\": \"1\",\n  \"startTime\": \"2025-02-12T10:00:00Z\",\n  \"endTime\": \"2025-02-12T12:00:00Z\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/bookings",
-              "host": ["{{baseUrl}}"],
-              "path": ["bookings"]
-            }
-          },
-          "response": []
+      "name": "Login User",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"apartment\": \"101\",\n  \"block\": 1,\n  \"password\": \"password123\"\n}"
         },
-        {
-          "name": "Get Bookings by User",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/bookings/user/1",
-              "host": ["{{baseUrl}}"],
-              "path": ["bookings", "user", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Get All Bookings",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/bookings",
-              "host": ["{{baseUrl}}"],
-              "path": ["bookings"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Delete Booking",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{token}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/bookings/1",
-              "host": ["{{baseUrl}}"],
-              "path": ["bookings", "1"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Check Availability",
-          "request": {
-            "method": "GET",
-            "url": {
-              "raw": "{{baseUrl}}/bookings/availability/1?startTime=2025-02-12T10:00:00Z&endTime=2025-02-12T12:00:00Z",
-              "host": ["{{baseUrl}}"],
-              "path": ["bookings", "availability", "1"],
-              "query": [
-                {
-                  "key": "startTime",
-                  "value": "2025-02-12T10:00:00Z"
-                },
-                {
-                  "key": "endTime",
-                  "value": "2025-02-12T12:00:00Z"
-                }
-              ]
-            }
-          },
-          "response": []
+        "url": {
+          "raw": "http://localhost:3000/api/users/login",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "users", "login"]
         }
-      ]
+      },
+      "response": []
+    },
+    {
+      "name": "Get User Profile",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:3000/api/users/profile",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "users", "profile"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Update User Profile",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"updateduser\",\n  \"email\": \"updateduser@example.com\",\n  \"password\": \"newpassword123\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/api/users/profile",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "users", "profile"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get All Users",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:3000/api/users",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "users"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Remove User",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:3000/api/users/:id",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["api", "users", ":id"],
+          "variable": [
+            {
+              "key": "id",
+              "value": "1"
+            }
+          ]
+        }
+      },
+      "response": []
     }
   ]
 }

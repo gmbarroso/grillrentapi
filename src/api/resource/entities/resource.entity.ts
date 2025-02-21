@@ -4,17 +4,14 @@ import { Booking } from '../../booking/entities/booking.entity';
 @Entity()
 export class Resource {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   @Column()
-  name: string;
+  name!: string;
 
   @Column()
-  type: string;
-
-  @Column()
-  description: string;
+  type!: string;
 
   @OneToMany(() => Booking, booking => booking.resource)
-  bookings: Booking[];
+  bookings!: Booking[];
 }

@@ -1,10 +1,10 @@
-import { Injectable, UnauthorizedException, Logger, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Logger, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { LoginUserDto } from '../dto/login-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
-import { User } from '../entities/user.entity';
+import { User, UserRole } from '../entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 
@@ -19,15 +19,15 @@ export class UserService {
   ) {}
 
   async register(createUserDto: CreateUserDto) {
-    const { name, email, apartment, password } = createUserDto;
+    const { name, email, apartment, block, password, role } = createUserDto;
 
-    // Verificar se o name, email ou apartment já existem
+    // Verificar se o name, email, apartment ou block já existem
     const existingUser = await this.userRepository.findOne({
-      where: [{ name }, { email }, { apartment }],
+      where: [{ name }, { email }, { apartment, block }],
     });
 
     if (existingUser) {
-      throw new ConflictException('Name, email or apartment already in use');
+      throw new ConflictException('Name, email, apartment or block already in use');
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -36,13 +36,13 @@ export class UserService {
   }
 
   async login(loginUserDto: LoginUserDto) {
-    this.logger.log(`Logging in user: ${loginUserDto.name}`);
-    const user = await this.userRepository.findOne({ where: { name: loginUserDto.name } });
+    this.logger.log(`Logging in user from apartment: ${loginUserDto.apartment}, block: ${loginUserDto.block}`);
+    const user = await this.userRepository.findOne({ where: { apartment: loginUserDto.apartment, block: loginUserDto.block } });
     if (!user || !(await bcrypt.compare(loginUserDto.password, user.password))) {
-      this.logger.warn(`Invalid credentials for user: ${loginUserDto.name}`);
+      this.logger.warn(`Invalid credentials for apartment: ${loginUserDto.apartment}, block: ${loginUserDto.block}`);
       throw new UnauthorizedException('Invalid credentials');
     }
-    const payload = { name: user.name, sub: user.id };
+    const payload = { name: user.name, sub: user.id, role: user.role };
     const token = this.jwtService.sign(payload);
     this.logger.log(`User logged in successfully: ${user.name}`);
     return { message: 'User logged in successfully', token };
@@ -59,13 +59,22 @@ export class UserService {
     return { message: 'User profile retrieved successfully', user };
   }
 
-  async updateProfile(userId: string, updateUserDto: UpdateUserDto) {
+  async updateProfile(userId: string, updateUserDto: UpdateUserDto, currentUser: User) {
     this.logger.log(`Updating profile for user ID: ${userId}`);
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       this.logger.warn(`User not found: ${userId}`);
       throw new UnauthorizedException('User not found');
     }
+
+    // Prevent residents from updating apartment and block
+    if (currentUser.role !== UserRole.ADMIN) {
+      if (updateUserDto.apartment || updateUserDto.block) {
+        this.logger.warn(`User ID: ${currentUser.id} does not have permission to update apartment or block`);
+        throw new ForbiddenException('You do not have permission to update apartment or block');
+      }
+    }
+
     Object.assign(user, updateUserDto);
     await this.userRepository.save(user);
     this.logger.log(`User profile updated successfully: ${user.name}`);

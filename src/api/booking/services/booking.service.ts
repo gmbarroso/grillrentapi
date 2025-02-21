@@ -83,12 +83,30 @@ export class BookingService {
 
   async findByUser(userId: string) {
     this.logger.log(`Fetching bookings for user ID: ${userId}`);
-    return this.bookingRepository.find({ where: { userId } });
+    const bookings = await this.bookingRepository.find({ where: { user: { id: userId } }, relations: ['resource', 'user'] });
+    return bookings.map(booking => ({
+      id: booking.id,
+      resourceId: booking.resource.id,
+      resourceName: booking.resource.name,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      userId: booking.user.id,
+      userApartment: booking.user.apartment,
+    }));
   }
 
   async findAll() {
     this.logger.log('Fetching all bookings');
-    return this.bookingRepository.find();
+    const bookings = await this.bookingRepository.find({ relations: ['resource', 'user'] });
+    return bookings.map(booking => ({
+      id: booking.id,
+      resourceId: booking.resource.id,
+      resourceName: booking.resource.name,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      userId: booking.user.id,
+      userApartment: booking.user.apartment,
+    }));
   }
 
   async remove(bookingId: string) {
