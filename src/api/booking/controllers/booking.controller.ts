@@ -39,9 +39,10 @@ export class BookingController {
 
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
-  async remove(@Param('id') id: string) {
-    this.logger.log(`Removing booking ID: ${id}`);
-    return this.bookingService.remove(id);
+  async remove(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    const userId = req.user.id.toString();
+    this.logger.log(`Removing booking ID: ${id} by user ID: ${userId}`);
+    return this.bookingService.remove(id, userId);
   }
 
   @Get('availability/:resourceId')

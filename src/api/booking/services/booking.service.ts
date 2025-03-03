@@ -4,7 +4,7 @@ import { Repository, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { CreateBookingDto } from '../dto/create-booking.dto';
 import { ResourceService } from '../../resource/services/resource.service';
 import { Booking } from '../entities/booking.entity';
-import { User } from '../../user/entities/user.entity';
+import { User, UserRole } from '../../user/entities/user.entity';
 import { Resource } from '../../resource/entities/resource.entity';
 
 @Injectable()
@@ -109,13 +109,26 @@ export class BookingService {
     }));
   }
 
-  async remove(bookingId: string) {
-    this.logger.log(`Removing booking ID: ${bookingId}`);
-    const booking = await this.bookingRepository.findOne({ where: { id: bookingId } });
+  async remove(bookingId: string, userId: string) {
+    this.logger.log(`Removing booking ID: ${bookingId} by user ID: ${userId}`);
+    
+    const booking = await this.bookingRepository.findOne({ where: { id: bookingId }, relations: ['user'] });
     if (!booking) {
       this.logger.warn(`Booking not found: ${bookingId}`);
       throw new NotFoundException('Booking not found');
     }
+  
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      this.logger.warn(`User not found: ${userId}`);
+      throw new NotFoundException('User not found');
+    }
+  
+    if (user.role !== UserRole.ADMIN && booking.user.id !== userId) {
+      this.logger.warn(`User ID: ${userId} is not authorized to remove booking ID: ${bookingId}`);
+      throw new BadRequestException('You are not authorized to remove this booking');
+    }
+  
     await this.bookingRepository.remove(booking);
     this.logger.log(`Booking removed successfully: ${bookingId}`);
     return { message: 'Booking removed successfully' };
