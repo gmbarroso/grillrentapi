@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { Repository, LessThanOrEqual, MoreThanOrEqual, FindManyOptions } from 'typeorm';
 import { CreateBookingDto } from '../dto/create-booking.dto';
 import { ResourceService } from '../../resource/services/resource.service';
 import { Booking } from '../entities/booking.entity';
@@ -25,6 +25,8 @@ export class BookingService {
     this.logger.log(`Creating booking for user ID: ${userId}`);
 
     const { resourceId, startTime, endTime } = createBookingDto;
+
+    this.logger.log(`Checking if booking is valid for resource ID: ${resourceId}, start time: ${startTime}, end time: ${endTime}`);
 
     // Verificar se a reserva está sendo feita para dias futuros
     const currentDate = new Date();
@@ -55,7 +57,13 @@ export class BookingService {
       throw new BadRequestException('Invalid user');
     }
 
-    const booking = this.bookingRepository.create({ ...createBookingDto, user, resource });
+    const booking = this.bookingRepository.create({ 
+      ...createBookingDto, 
+      user, 
+      resource, 
+      startTime: new Date(startTime), 
+      endTime: new Date(endTime) 
+    });
     await this.bookingRepository.save(booking);
     this.logger.log(`Booking created successfully: ${booking.id}`);
 
@@ -81,34 +89,61 @@ export class BookingService {
     return { available: true, message: 'Available' };
   }
 
-  async findByUser(userId: string) {
-    this.logger.log(`Fetching bookings for user ID: ${userId}`);
-    const bookings = await this.bookingRepository.find({ where: { user: { id: userId } }, relations: ['resource', 'user'] });
-    return bookings.map(booking => ({
-      id: booking.id,
-      resourceId: booking.resource.id,
-      resourceName: booking.resource.name,
-      resourceType: booking.resource.type,
-      startTime: booking.startTime,
-      endTime: booking.endTime,
-      userId: booking.user.id,
-      userApartment: booking.user.apartment,
-    }));
+  async findByUser(userId: string, page: number = 1, limit: number = 10, sort: string = 'startTime', order: 'ASC' | 'DESC' = 'ASC') {
+    this.logger.log(`Fetching bookings for user ID: ${userId} with pagination and sorting`);
+    const options: FindManyOptions<Booking> = {
+      where: { user: { id: userId } },
+      relations: ['resource', 'user'],
+      take: limit,
+      skip: (page - 1) * limit,
+      order: {
+        [sort]: order,
+      },
+    };
+    const [bookings, total] = await this.bookingRepository.findAndCount(options);
+    return {
+      data: bookings.map(booking => ({
+        id: booking.id,
+        resourceId: booking.resource.id,
+        resourceName: booking.resource.name,
+        resourceType: booking.resource.type,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        userId: booking.user.id,
+        userApartment: booking.user.apartment,
+      })),
+      total,
+      page,
+      lastPage: Math.ceil(total / limit),
+    };
   }
 
-  async findAll() {
-    this.logger.log('Fetching all bookings');
-    const bookings = await this.bookingRepository.find({ relations: ['resource', 'user'] });
-    return bookings.map(booking => ({
-      id: booking.id,
-      resourceId: booking.resource.id,
-      resourceName: booking.resource.name,
-      resourceType: booking.resource.type,
-      startTime: booking.startTime,
-      endTime: booking.endTime,
-      userId: booking.user.id,
-      userApartment: booking.user.apartment,
-    }));
+  async findAll(page: number = 1, limit: number = 10, sort: string = 'startTime', order: 'ASC' | 'DESC' = 'ASC') {
+    this.logger.log('Fetching all bookings with pagination and sorting');
+    const options: FindManyOptions<Booking> = {
+      relations: ['resource', 'user'],
+      take: limit,
+      skip: (page - 1) * limit,
+      order: {
+        [sort]: order,
+      },
+    };
+    const [bookings, total] = await this.bookingRepository.findAndCount(options);
+    return {
+      data: bookings.map(booking => ({
+        id: booking.id,
+        resourceId: booking.resource.id,
+        resourceName: booking.resource.name,
+        resourceType: booking.resource.type,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        userId: booking.user.id,
+        userApartment: booking.user.apartment,
+      })),
+      total,
+      page,
+      lastPage: Math.ceil(total / limit),
+    };
   }
 
   async remove(bookingId: string, userId: string) {

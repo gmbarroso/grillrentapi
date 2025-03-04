@@ -25,16 +25,27 @@ export class BookingController {
 
   @UseGuards(JwtAuthGuard)
   @Get('user/:userId')
-  async findByUser(@Param('userId') userId: string) {
+  async findByUser(
+    @Param('userId') userId: string,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
+    @Query('sort') sort: string = 'startTime',
+    @Query('order') order: 'ASC' | 'DESC' = 'ASC',
+  ) {
     this.logger.log(`Fetching bookings for user ID: ${userId}`);
-    return this.bookingService.findByUser(userId);
+    return this.bookingService.findByUser(userId, page, limit, sort, order);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  async findAll() {
+  async findAll(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
+    @Query('sort') sort: string = 'startTime',
+    @Query('order') order: 'ASC' | 'DESC' = 'ASC',
+  ) {
     this.logger.log('Fetching all bookings');
-    return this.bookingService.findAll();
+    return this.bookingService.findAll(page, limit, sort, order);
   }
 
   @UseGuards(JwtAuthGuard)
