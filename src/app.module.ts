@@ -23,6 +23,9 @@ import { LoggerMiddleware } from './middleware/logger.middleware';
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: true,
         logging: true,
+        ssl: {
+          rejectUnauthorized: false,
+        },
       }),
       inject: [ConfigService],
     }),

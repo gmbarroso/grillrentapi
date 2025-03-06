@@ -30,7 +30,7 @@ export class BookingService {
 
     // Verificar se a reserva está sendo feita para dias futuros
     const currentDate = new Date();
-    currentDate.setHours(0, 0, 0, 0);
+    currentDate.setUTCHours(0, 0, 0, 0);
     if (new Date(startTime) <= currentDate) {
       this.logger.warn(`Cannot create booking for today or a past date: ${startTime}`);
       throw new BadRequestException('Cannot create booking for today or a past date');
@@ -61,11 +61,12 @@ export class BookingService {
       ...createBookingDto, 
       user, 
       resource, 
-      startTime: new Date(startTime), 
-      endTime: new Date(endTime) 
+      startTime: new Date(startTime).toISOString(), 
+      endTime: new Date(endTime).toISOString() 
     });
     await this.bookingRepository.save(booking);
     this.logger.log(`Booking created successfully: ${booking.id}`);
+    this.logger.log(`Booking created successfully: ${booking.id}, user: ${user.id}, resource: ${resource.id}, start time: ${startTime}, end time: ${endTime}`);
 
     return { message: 'Booking created successfully', booking };
   }
