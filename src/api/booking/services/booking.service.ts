@@ -80,6 +80,8 @@ export class BookingService {
       relations: ['user'],
     });
 
+    console.log(existingBookings)
+
     if (existingBookings.length > 0) {
       const existingBooking = existingBookings[0];
       this.logger.warn(`There is already a booking for resource ID: ${resourceId} at the specified time by apartment ${existingBooking.user.apartment}`);
