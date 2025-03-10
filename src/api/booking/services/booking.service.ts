@@ -28,27 +28,32 @@ export class BookingService {
 
     this.logger.log(`Checking if booking is valid for resource ID: ${resourceId}, start time: ${startTime}, end time: ${endTime}`);
 
-    // Verificar se a reserva está sendo feita para dias futuros
     const currentDate = new Date();
-    currentDate.setUTCHours(0, 0, 0, 0);
-    if (new Date(startTime) <= currentDate) {
-      this.logger.warn(`Cannot create booking for today or a past date: ${startTime}`);
-      throw new BadRequestException('Cannot create booking for today or a past date');
+    if (new Date(startTime) < currentDate) {
+      this.logger.warn(`Cannot create booking for a past date: ${startTime}`);
+      throw new BadRequestException('Cannot create booking for a past date');
     }
 
-    // Verificar disponibilidade
-    const isAvailable = await this.checkAvailability(resourceId, new Date(startTime), new Date(endTime));
+    const resource = await this.resourceService.findOne(resourceId);
+    if (!resource) {
+      this.logger.warn(`Resource not found: ${resourceId}`);
+      throw new BadRequestException('Resource not found');
+    }
+
+    const isAvailable = await this.checkAvailability(resource.type, resourceId, new Date(startTime), new Date(endTime));
 
     if (!isAvailable.available) {
       this.logger.warn(`Resource ID: ${resourceId} is not available from ${startTime} to ${endTime}`);
       throw new BadRequestException(isAvailable.message);
     }
 
-    // Verificar se o recurso existe
-    const resource = await this.resourceService.findOne(resourceId);
-    if (!resource) {
-      this.logger.warn(`Resource not found: ${resourceId}`);
-      throw new BadRequestException('Resource not found');
+    if (resource.type === 'tennis') {
+      const totalHours = await this.getTotalBookingHoursForUser(userId, resourceId, new Date(startTime));
+      const bookingDuration = (new Date(endTime).getTime() - new Date(startTime).getTime()) / (1000 * 60 * 60);
+      if (totalHours + bookingDuration > 2) {
+        this.logger.warn(`User ID: ${userId} has exceeded the maximum booking duration for tennis`);
+        throw new BadRequestException('You cannot book more than 2 hours for tennis');
+      }
     }
 
     const user = await this.userRepository.findOne({ where: { id: userId } });
@@ -71,8 +76,9 @@ export class BookingService {
     return { message: 'Booking created successfully', booking };
   }
 
-  async checkAvailability(resourceId: string, startTime: Date, endTime: Date) {
+  async checkAvailability(resourceType: string, resourceId: string, startTime: Date, endTime: Date) {
     this.logger.log(`Checking for existing bookings for resource ID: ${resourceId} from ${startTime} to ${endTime}`);
+    
     const existingBookings = await this.bookingRepository.find({
       where: [
         { resourceId, startTime: LessThanOrEqual(endTime), endTime: MoreThanOrEqual(startTime) },
@@ -80,16 +86,47 @@ export class BookingService {
       relations: ['user'],
     });
 
-    console.log(existingBookings)
-
-    if (existingBookings.length > 0) {
-      const existingBooking = existingBookings[0];
-      this.logger.warn(`There is already a booking for resource ID: ${resourceId} at the specified time by apartment ${existingBooking.user.apartment}`);
-      return { available: false, message: `Resource is already booked by apartment ${existingBooking.user.apartment} at the specified time` };
+    if (resourceType === 'tennis') {
+      const sameTimeBooking = existingBookings.find(booking => 
+        booking.startTime.getTime() === startTime.getTime() || booking.endTime.getTime() === endTime.getTime()
+      );
+      if (sameTimeBooking) {
+        this.logger.warn(`There is already a booking for resource ID: ${resourceId} at the specified time by apartment ${sameTimeBooking.user.apartment}`);
+        return { available: false, message: `Resource is already booked by apartment ${sameTimeBooking.user.apartment} at the specified time` };
+      }
+    } else {
+      if (existingBookings.length > 0) {
+        const existingBooking = existingBookings[0];
+        this.logger.warn(`There is already a booking for resource ID: ${resourceId} at the specified time by apartment ${existingBooking.user.apartment}`);
+        return { available: false, message: `Resource is already booked by apartment ${existingBooking.user.apartment} at the specified time` };
+      }
     }
 
     this.logger.log(`Resource ID: ${resourceId} is available from ${startTime} to ${endTime}`);
     return { available: true, message: 'Available' };
+  }
+
+  async getTotalBookingHoursForUser(userId: string, resourceId: string, startTime: Date): Promise<number> {
+    this.logger.log(`Calculating total booking hours for user ID: ${userId} and resource ID: ${resourceId} on ${startTime}`);
+    
+    const startOfDay = new Date(startTime);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(startTime);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+
+    const bookings = await this.bookingRepository.find({
+      where: [
+        { user: { id: userId }, resourceId, startTime: MoreThanOrEqual(startOfDay), endTime: LessThanOrEqual(endOfDay) },
+      ],
+    });
+
+    const totalHours = bookings.reduce((sum, booking) => {
+      const duration = (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / (1000 * 60 * 60);
+      return sum + duration;
+    }, 0);
+
+    this.logger.log(`Total booking hours for user ID: ${userId} and resource ID: ${resourceId} on ${startTime} is ${totalHours}`);
+    return totalHours;
   }
 
   async findByUser(userId: string, page: number = 1, limit: number = 10, sort: string = 'startTime', order: 'ASC' | 'DESC' = 'ASC') {
