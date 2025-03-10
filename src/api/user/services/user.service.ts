@@ -21,7 +21,6 @@ export class UserService {
   async register(createUserDto: CreateUserDto) {
     const { name, email, apartment, block, password, role } = createUserDto;
 
-    // Verificar se o name, email, apartment ou block já existem
     const existingUser = await this.userRepository.findOne({
       where: [{ name }, { email }, { apartment, block }],
     });
@@ -67,7 +66,6 @@ export class UserService {
       throw new UnauthorizedException('User not found');
     }
 
-    // Prevent residents from updating apartment and block
     if (currentUser.role !== UserRole.ADMIN) {
       if (updateUserDto.apartment || updateUserDto.block) {
         this.logger.warn(`User ID: ${currentUser.id} does not have permission to update apartment or block`);
