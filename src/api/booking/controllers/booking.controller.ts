@@ -59,10 +59,11 @@ export class BookingController {
   @Get('availability/:resourceId')
   async checkAvailability(
     @Param('resourceId') resourceId: string,
+    @Query('resourceType') resourceType: string,
     @Query('startTime') startTime: string,
     @Query('endTime') endTime: string
   ) {
     this.logger.log(`Checking availability for resource ID: ${resourceId} from ${startTime} to ${endTime}`);
-    return this.bookingService.checkAvailability(resourceId, new Date(startTime), new Date(endTime));
+    return this.bookingService.checkAvailability(resourceType, resourceId, new Date(startTime), new Date(endTime));
   }
 }
