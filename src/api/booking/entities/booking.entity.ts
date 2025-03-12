@@ -26,4 +26,7 @@ export class Booking {
   @ManyToOne(() => Resource)
   @JoinColumn({ name: 'resourceId' })
   resource!: Resource;
+
+  @Column({ default: false })
+  needTablesAndChairs!: boolean;
 }

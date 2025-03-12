@@ -24,7 +24,7 @@ export class BookingService {
   async create(createBookingDto: CreateBookingDto, userId: string) {
     this.logger.log(`Creating booking for user ID: ${userId}`);
 
-    const { resourceId, startTime, endTime } = createBookingDto;
+    const { resourceId, startTime, endTime, needTablesAndChairs } = createBookingDto;
 
     this.logger.log(`Checking if booking is valid for resource ID: ${resourceId}, start time: ${startTime}, end time: ${endTime}`);
 
@@ -62,11 +62,12 @@ export class BookingService {
       user, 
       resource, 
       startTime: new Date(startTime).toISOString(), 
-      endTime: new Date(endTime).toISOString() 
+      endTime: new Date(endTime).toISOString(),
+      needTablesAndChairs
     });
     await this.bookingRepository.save(booking);
     this.logger.log(`Booking created successfully: ${booking.id}`);
-    this.logger.log(`Booking created successfully: ${booking.id}, user: ${user.id}, resource: ${resource.id}, start time: ${startTime}, end time: ${endTime}`);
+    this.logger.log(`Booking created successfully: ${booking.id}, user: ${user.id}, resource: ${resource.id}, start time: ${startTime}, end time: ${endTime}, needTablesAndChairs: ${needTablesAndChairs}`);
 
     return { message: 'Booking created successfully', booking };
   }
