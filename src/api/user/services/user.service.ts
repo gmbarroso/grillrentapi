@@ -7,6 +7,7 @@ import { UpdateUserDto } from '../dto/update-user.dto';
 import { User, UserRole } from '../entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
+import { AuthService } from '../../../shared/auth/services/auth.service';
 
 @Injectable()
 export class UserService {
@@ -16,12 +17,12 @@ export class UserService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly jwtService: JwtService,
+    private readonly authService: AuthService,
   ) {}
 
   async register(createUserDto: CreateUserDto) {
     const { name, email, apartment, block, password, role } = createUserDto;
 
-    // Verificar se o name, email, apartment ou block já existem
     const existingUser = await this.userRepository.findOne({
       where: [{ name }, { email }, { apartment, block }],
     });
@@ -67,7 +68,6 @@ export class UserService {
       throw new UnauthorizedException('User not found');
     }
 
-    // Prevent residents from updating apartment and block
     if (currentUser.role !== UserRole.ADMIN) {
       if (updateUserDto.apartment || updateUserDto.block) {
         this.logger.warn(`User ID: ${currentUser.id} does not have permission to update apartment or block`);

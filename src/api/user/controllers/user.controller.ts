@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Logger, Get, Put, Delete, Param, Req, UseGuards, ForbiddenException } from '@nestjs/common';
+import { Controller, Post, Body, Logger, Get, Put, Delete, Param, Req, UseGuards, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { CreateUserDto, CreateUserSchema } from '../dto/create-user.dto';
 import { LoginUserDto, LoginUserSchema } from '../dto/login-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
@@ -34,6 +34,10 @@ export class UserController {
   @Post('logout')
   async logout(@Req() req) {
     const token = req.headers.authorization.split(' ')[1];
+    const isRevoked = await this.authService.isTokenRevoked(token);
+    if (isRevoked) {
+      throw new UnauthorizedException('Token has been revoked');
+    }
     this.logger.log('Logging out user');
     return this.authService.logout(token);
   }

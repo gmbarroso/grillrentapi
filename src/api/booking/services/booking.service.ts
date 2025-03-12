@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThanOrEqual, MoreThanOrEqual, FindManyOptions } from 'typeorm';
 import { CreateBookingDto } from '../dto/create-booking.dto';
@@ -6,6 +6,7 @@ import { ResourceService } from '../../resource/services/resource.service';
 import { Booking } from '../entities/booking.entity';
 import { User, UserRole } from '../../user/entities/user.entity';
 import { Resource } from '../../resource/entities/resource.entity';
+import { AuthService } from '../../../shared/auth/services/auth.service';
 
 @Injectable()
 export class BookingService {
@@ -19,6 +20,7 @@ export class BookingService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly resourceService: ResourceService,
+    private readonly authService: AuthService,
   ) {}
 
   async create(createBookingDto: CreateBookingDto, userId: string) {
