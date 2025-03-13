@@ -127,6 +127,7 @@ export class BookingService {
   async findAll(page: number = 1, limit: number = 10, sort: string = 'startTime', order: 'ASC' | 'DESC' = 'ASC') {
     this.logger.log('Fetching all bookings with pagination and sorting');
     const options: FindManyOptions<Booking> = {
+      where: { startTime: MoreThanOrEqual(new Date()) },
       relations: ['resource', 'user'],
       take: limit,
       skip: (page - 1) * limit,
