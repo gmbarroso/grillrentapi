@@ -5,6 +5,7 @@ import { UserModule } from './api/user/user.module';
 import { ResourceModule } from './api/resource/resource.module';
 import { BookingModule } from './api/booking/booking.module';
 import { LoggerMiddleware } from './middleware/logger.middleware';
+import { NoticeModule } from './api/notice/notice.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { LoggerMiddleware } from './middleware/logger.middleware';
     UserModule,
     ResourceModule,
     BookingModule,
+    NoticeModule,
   ],
   controllers: [],
   providers: [],
