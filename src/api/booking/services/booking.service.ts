@@ -126,16 +126,28 @@ export class BookingService {
 
   async findAll(page: number = 1, limit: number = 10, sort: string = 'startTime', order: 'ASC' | 'DESC' = 'ASC') {
     this.logger.log('Fetching all bookings with pagination and sorting');
-    const options: FindManyOptions<Booking> = {
-      where: { startTime: MoreThanOrEqual(new Date()) },
-      relations: ['resource', 'user'],
-      take: limit,
-      skip: (page - 1) * limit,
-      order: {
-        [sort]: order,
-      },
-    };
-    const [bookings, total] = await this.bookingRepository.findAndCount(options);
+
+    const validSortColumns = ['startTime', 'endTime', 'resourceType', 'userApartment'];
+    if (!validSortColumns.includes(sort)) {
+      throw new BadRequestException(`Invalid sort column: ${sort}`);
+    }
+
+    const queryBuilder = this.bookingRepository.createQueryBuilder('booking')
+      .leftJoinAndSelect('booking.resource', 'resource')
+      .leftJoinAndSelect('booking.user', 'user')
+      .take(limit)
+      .skip((page - 1) * limit);
+
+    if (sort === 'resourceType') {
+      queryBuilder.orderBy('resource.type', order);
+    } else if (sort === 'userApartment') {
+      queryBuilder.orderBy('user.apartment', order);
+    } else {
+      queryBuilder.orderBy(`booking.${sort}`, order);
+    }
+
+    const [bookings, total] = await queryBuilder.getManyAndCount();
+
     return {
       data: bookings.map(booking => ({
         id: booking.id,
