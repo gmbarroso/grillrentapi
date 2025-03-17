@@ -87,4 +87,14 @@ export class BookingController {
     this.logger.log(`Checking availability for resource ID: ${resourceId} from ${startTime} to ${endTime}`);
     return this.bookingService.checkAvailability(resourceId, new Date(startTime), new Date(endTime));
   }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('reserved-times')
+  async getReservedTimes(
+    @Query('resourceType') resourceType: string,
+    @Query('date') date?: string,
+  ) {
+    this.logger.log(`Fetching reserved times for resourceType: ${resourceType}${date ? ` on date: ${date}` : ''}`);
+    return this.bookingService.getReservedTimes(resourceType, date);
+  }
 }

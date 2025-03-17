@@ -219,4 +219,50 @@ export class BookingService {
     this.logger.log(`Booking removed successfully: ${bookingId}`);
     return { message: 'Booking removed successfully' };
   }
+
+  async getReservedTimes(resourceType: string, date?: string) {
+    this.logger.log(`Fetching reserved times for resourceType: ${resourceType}${date ? ` on date: ${date}` : ''}`);
+
+    const resources = await this.resourceRepository.find({ where: { type: resourceType } });
+    if (resources.length === 0) {
+      this.logger.warn(`No resources found for type: ${resourceType}`);
+      throw new BadRequestException(`No resources found for type: ${resourceType}`);
+    }
+
+    if (resourceType === 'grill') {
+      const bookings = await this.bookingRepository.find({
+        where: { resource: { type: resourceType } },
+        relations: ['resource'],
+      });
+
+      const reservedDays = Array.from(
+        new Set(bookings.map(booking => new Date(booking.startTime).toISOString().split('T')[0]))
+      );
+      return { reservedDays };
+    }
+
+    if (!date) {
+      this.logger.warn('Date parameter is required for non-grill resources');
+      throw new BadRequestException('Date parameter is required for non-grill resources');
+    }
+
+    const startOfDay = new Date(`${date}T00:00:00Z`);
+    const endOfDay = new Date(`${date}T23:59:59Z`);
+
+    const bookings = await this.bookingRepository.find({
+      where: {
+        resource: { type: resourceType },
+        startTime: MoreThanOrEqual(startOfDay),
+        endTime: LessThanOrEqual(endOfDay),
+      },
+      relations: ['resource'],
+    });
+
+    const reservedTimes = bookings.map(booking => ({
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+    }));
+
+    return { reservedTimes };
+  }
 }
