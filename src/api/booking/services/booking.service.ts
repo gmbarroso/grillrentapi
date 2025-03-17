@@ -30,6 +30,12 @@ export class BookingService {
 
     this.logger.log(`Checking if booking is valid for resource ID: ${resourceId}, start time: ${startTime}, end time: ${endTime}`);
 
+    // Verificar se o horário de início e término são iguais
+    if (new Date(startTime).getTime() === new Date(endTime).getTime()) {
+      this.logger.warn(`Start time and end time cannot be the same: ${startTime}`);
+      throw new BadRequestException('Start time and end time cannot be the same');
+    }
+
     // Verificar se a reserva está sendo feita para dias futuros
     const currentDate = new Date();
     currentDate.setUTCHours(0, 0, 0, 0);
@@ -77,16 +83,36 @@ export class BookingService {
   async checkAvailability(resourceId: string, startTime: Date, endTime: Date) {
     this.logger.log(`Checking for existing bookings for resource ID: ${resourceId} from ${startTime} to ${endTime}`);
     
+    const resource = await this.resourceRepository.findOne({ where: { id: resourceId } });
+    if (!resource) {
+      this.logger.warn(`Resource not found: ${resourceId}`);
+      throw new BadRequestException('Resource not found');
+    }
+  
     const existingBookings = await this.bookingRepository.find({
       where: { resource: { id: resourceId } },
       relations: ['user'],
     });
   
+    // Verificação específica para o tipo "grill"
+    if (resource.type === 'grill') {
+      const bookingDate = startTime.toISOString().split('T')[0]; // Extrai a data (YYYY-MM-DD)
+      const hasBookingOnSameDay = existingBookings.some(booking => {
+        const existingBookingDate = new Date(booking.startTime).toISOString().split('T')[0];
+        return existingBookingDate === bookingDate;
+      });
+  
+      if (hasBookingOnSameDay) {
+        this.logger.warn(`Resource ID: ${resourceId} (type: grill) already has a booking on ${bookingDate}`);
+        return { available: false, message: `Resource of type "grill" is already booked on ${bookingDate}` };
+      }
+    }
+  
+    // Verificação geral para sobreposição de horários
     for (const booking of existingBookings) {
       const existingStartTime = new Date(booking.startTime);
       const existingEndTime = new Date(booking.endTime);
   
-      // Allow bookings only if they do not overlap
       if (
         !(existingEndTime <= startTime || existingStartTime >= endTime)
       ) {
