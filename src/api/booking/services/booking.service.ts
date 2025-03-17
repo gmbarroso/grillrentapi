@@ -76,21 +76,25 @@ export class BookingService {
 
   async checkAvailability(resourceId: string, startTime: Date, endTime: Date) {
     this.logger.log(`Checking for existing bookings for resource ID: ${resourceId} from ${startTime} to ${endTime}`);
+    
     const existingBookings = await this.bookingRepository.find({
-      where: [
-        { resourceId, startTime: LessThanOrEqual(endTime), endTime: MoreThanOrEqual(startTime) },
-      ],
+      where: { resource: { id: resourceId } },
       relations: ['user'],
     });
-
-    console.log(existingBookings)
-
-    if (existingBookings.length > 0) {
-      const existingBooking = existingBookings[0];
-      this.logger.warn(`There is already a booking for resource ID: ${resourceId} at the specified time by apartment ${existingBooking.user.apartment}`);
-      return { available: false, message: `Resource is already booked by apartment ${existingBooking.user.apartment} at the specified time` };
+  
+    for (const booking of existingBookings) {
+      const existingStartTime = new Date(booking.startTime);
+      const existingEndTime = new Date(booking.endTime);
+  
+      // Allow bookings only if they do not overlap
+      if (
+        !(existingEndTime <= startTime || existingStartTime >= endTime)
+      ) {
+        this.logger.warn(`Resource ID: ${resourceId} is not available from ${startTime} to ${endTime}`);
+        return { available: false, message: `Resource is already booked by apartment ${booking.user.apartment} at the specified time` };
+      }
     }
-
+  
     this.logger.log(`Resource ID: ${resourceId} is available from ${startTime} to ${endTime}`);
     return { available: true, message: 'Available' };
   }
