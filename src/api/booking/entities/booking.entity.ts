@@ -29,4 +29,7 @@ export class Booking {
 
   @Column({ default: false })
   needTablesAndChairs!: boolean;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  bookedOnBehalf?: string;
 }

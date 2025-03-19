@@ -23,10 +23,20 @@ export class BookingService {
     private readonly authService: AuthService,
   ) {}
 
-  async create(createBookingDto: CreateBookingDto, userId: string) {
+  async create(createBookingDto: CreateBookingDto, userId: string, userRole: string) {
     this.logger.log(`Creating booking for user ID: ${userId}`);
 
-    const { resourceId, startTime, endTime, needTablesAndChairs } = createBookingDto;
+    const { resourceId, startTime, endTime, needTablesAndChairs, bookedOnBehalf } = createBookingDto;
+
+    if (bookedOnBehalf && userRole !== UserRole.ADMIN) {
+      this.logger.warn(`User ID: ${userId} is not authorized to set bookedOnBehalf`);
+      throw new UnauthorizedException('Only admins can set bookedOnBehalf');
+    }
+
+    if (bookedOnBehalf && bookedOnBehalf.length > 50) {
+      this.logger.warn(`Invalid value for bookedOnBehalf: ${bookedOnBehalf}`);
+      throw new BadRequestException('bookedOnBehalf must be a string with a maximum length of 50 characters');
+    }
 
     this.logger.log(`Checking if booking is valid for resource ID: ${resourceId}, start time: ${startTime}, end time: ${endTime}`);
 
@@ -67,17 +77,47 @@ export class BookingService {
 
     const booking = this.bookingRepository.create({ 
       ...createBookingDto, 
-      user, 
-      resource, 
+      user: { id: user.id } as User, 
+      resource: { id: resource.id } as Resource, 
       startTime: new Date(startTime).toISOString(), 
       endTime: new Date(endTime).toISOString(),
-      needTablesAndChairs
+      needTablesAndChairs,
+      bookedOnBehalf: userRole === UserRole.ADMIN ? bookedOnBehalf || undefined : undefined,
     });
     await this.bookingRepository.save(booking);
     this.logger.log(`Booking created successfully: ${booking.id}`);
     this.logger.log(`Booking created successfully: ${booking.id}, user: ${user.id}, resource: ${resource.id}, start time: ${startTime}, end time: ${endTime}, needTablesAndChairs: ${needTablesAndChairs}`);
 
     return { message: 'Booking created successfully', booking };
+  }
+
+  async update(bookingId: string, updateBookingDto: Partial<CreateBookingDto>, userId: string, userRole: string) {
+    this.logger.log(`Updating booking ID: ${bookingId} by user ID: ${userId}`);
+
+    const booking = await this.bookingRepository.findOne({ where: { id: bookingId } });
+    if (!booking) {
+      this.logger.warn(`Booking not found: ${bookingId}`);
+      throw new NotFoundException('Booking not found');
+    }
+
+    if (updateBookingDto.bookedOnBehalf && userRole !== UserRole.ADMIN) {
+      this.logger.warn(`User ID: ${userId} is not authorized to set bookedOnBehalf`);
+      throw new UnauthorizedException('Only admins can set bookedOnBehalf');
+    }
+
+    if (updateBookingDto.bookedOnBehalf && updateBookingDto.bookedOnBehalf.length > 50) {
+      this.logger.warn(`Invalid value for bookedOnBehalf: ${updateBookingDto.bookedOnBehalf}`);
+      throw new BadRequestException('bookedOnBehalf must be a string with a maximum length of 50 characters');
+    }
+
+    Object.assign(booking, {
+      ...updateBookingDto,
+      bookedOnBehalf: userRole === UserRole.ADMIN ? updateBookingDto.bookedOnBehalf : booking.bookedOnBehalf,
+    });
+
+    await this.bookingRepository.save(booking);
+    this.logger.log(`Booking updated successfully: ${booking.id}`);
+    return { message: 'Booking updated successfully', booking };
   }
 
   async checkAvailability(resourceId: string, startTime: Date, endTime: Date) {
@@ -147,6 +187,7 @@ export class BookingService {
         endTime: booking.endTime,
         userId: booking.user.id,
         userApartment: booking.user.apartment,
+        bookedOnBehalf: booking.bookedOnBehalf,
       })),
       total,
       page,
@@ -188,6 +229,7 @@ export class BookingService {
         endTime: booking.endTime,
         userId: booking.user.id,
         userApartment: booking.user.apartment,
+        bookedOnBehalf: booking.bookedOnBehalf, // Incluído na resposta
       })),
       total,
       page,

@@ -6,6 +6,7 @@ export const CreateBookingSchema = Joi.object({
   startTime: Joi.date().required(),
   endTime: Joi.date().required(),
   needTablesAndChairs: Joi.boolean().required(),
+  bookedOnBehalf: Joi.string().optional(),
 });
 
 export class CreateBookingDto {
@@ -14,4 +15,5 @@ export class CreateBookingDto {
   startTime!: Date;
   endTime!: Date;
   needTablesAndChairs!: boolean;
+  bookedOnBehalf?: string;
 }

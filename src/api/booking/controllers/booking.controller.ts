@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Logger, Get, Param, Delete, UseGuards, Req, Query, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Body, Logger, Get, Param, Delete, UseGuards, Req, Query, UnauthorizedException, Put } from '@nestjs/common';
 import { BookingService } from '../services/booking.service';
 import { CreateBookingDto } from '../dto/create-booking.dto';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
@@ -32,8 +32,31 @@ export class BookingController {
       throw new UnauthorizedException('Token has been revoked');
     }
     const userId = req.user.id.toString();
+    const userRole = req.user.role;
     this.logger.log(`Creating booking for user ID: ${userId}`);
-    return this.bookingService.create(createBookingDto, userId);
+    return this.bookingService.create(createBookingDto, userId, userRole);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put(':id')
+  async update(
+    @Param('id') id: string,
+    @Body() updateBookingDto: Partial<CreateBookingDto>,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const authorizationHeader = req.headers.authorization;
+    if (!authorizationHeader) {
+      throw new UnauthorizedException('Authorization header is missing');
+    }
+    const token = authorizationHeader.split(' ')[1];
+    const isRevoked = await this.authService.isTokenRevoked(token);
+    if (isRevoked) {
+      throw new UnauthorizedException('Token has been revoked');
+    }
+    const userId = req.user.id.toString();
+    const userRole = req.user.role;
+    this.logger.log(`Updating booking ID: ${id} by user ID: ${userId}`);
+    return this.bookingService.update(id, updateBookingDto, userId, userRole);
   }
 
   @UseGuards(JwtAuthGuard)
