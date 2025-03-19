@@ -16,6 +16,16 @@ async function bootstrap() {
     credentials: true,
   });
 
+  app.use((req, res, next) => {
+    res.cookie('token', 'your-jwt-token', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      maxAge: 3600000,
+    });
+    next();
+  });
+
   app.useGlobalPipes(new ValidationPipe());
   const port = configService.get<number>('PORT') || 3000;
   await app.listen(port);
