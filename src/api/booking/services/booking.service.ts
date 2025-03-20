@@ -136,7 +136,7 @@ export class BookingService {
   
     // Verificação específica para o tipo "grill"
     if (resource.type === 'grill') {
-      const bookingDate = startTime.toISOString().split('T')[0]; // Extrai a data (YYYY-MM-DD)
+      const bookingDate = startTime.toISOString().split('T')[0];
       const hasBookingOnSameDay = existingBookings.some(booking => {
         const existingBookingDate = new Date(booking.startTime).toISOString().split('T')[0];
         return existingBookingDate === bookingDate;
@@ -188,6 +188,7 @@ export class BookingService {
         userId: booking.user.id,
         userApartment: booking.user.apartment,
         bookedOnBehalf: booking.bookedOnBehalf,
+        needTablesAndChairs: booking.needTablesAndChairs, // Incluído na resposta
       })),
       total,
       page,
@@ -229,7 +230,8 @@ export class BookingService {
         endTime: booking.endTime,
         userId: booking.user.id,
         userApartment: booking.user.apartment,
-        bookedOnBehalf: booking.bookedOnBehalf, // Incluído na resposta
+        bookedOnBehalf: booking.bookedOnBehalf,
+        needTablesAndChairs: booking.needTablesAndChairs, // Incluído na resposta
       })),
       total,
       page,
