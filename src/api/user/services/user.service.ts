@@ -75,10 +75,17 @@ export class UserService {
       }
     }
 
+    if (updateUserDto.password) {
+      updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
+    }
+
     Object.assign(user, updateUserDto);
-    await this.userRepository.save(user);
+    const updatedUser = await this.userRepository.save(user);
+
+    const { password, ...userWithoutPassword } = updatedUser;
+
     this.logger.log(`User profile updated successfully: ${user.name}`);
-    return { message: 'User profile updated successfully', user };
+    return { message: 'User profile updated successfully', user: updatedUser };
   }
 
   async getAllUsers() {

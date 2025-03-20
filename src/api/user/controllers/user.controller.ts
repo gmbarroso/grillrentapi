@@ -51,9 +51,19 @@ export class UserController {
 
   @UseGuards(JwtAuthGuard)
   @Put('profile')
-  async updateProfile(@User() user: UserEntity, @Body() updateUserDto: UpdateUserDto) {
-    this.logger.log(`Updating profile for user ID: ${user.id}`);
-    return this.userService.updateProfile(user.id, updateUserDto, user);
+  async updateProfile(@Req() req: any, @Body() updateData: Partial<UserEntity>) {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      throw new UnauthorizedException('User ID is missing');
+    }
+
+    const updatedUser = await this.userService.updateProfile(userId, updateData, req.user);
+
+    return {
+      message: 'User profile updated successfully',
+      user: updatedUser,
+    };
   }
 
   @UseGuards(JwtAuthGuard)
