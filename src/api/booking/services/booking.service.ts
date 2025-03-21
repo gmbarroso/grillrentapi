@@ -187,8 +187,9 @@ export class BookingService {
         endTime: booking.endTime,
         userId: booking.user.id,
         userApartment: booking.user.apartment,
+        userBlock: booking.user.block,
         bookedOnBehalf: booking.bookedOnBehalf,
-        needTablesAndChairs: booking.needTablesAndChairs, // Incluído na resposta
+        needTablesAndChairs: booking.needTablesAndChairs,
       })),
       total,
       page,
@@ -230,8 +231,9 @@ export class BookingService {
         endTime: booking.endTime,
         userId: booking.user.id,
         userApartment: booking.user.apartment,
+        userBlock: booking.user.block,
         bookedOnBehalf: booking.bookedOnBehalf,
-        needTablesAndChairs: booking.needTablesAndChairs, // Incluído na resposta
+        needTablesAndChairs: booking.needTablesAndChairs,
       })),
       total,
       page,
