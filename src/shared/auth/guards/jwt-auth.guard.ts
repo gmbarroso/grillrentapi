@@ -1,34 +1,28 @@
 import { Injectable, ExecutionContext, UnauthorizedException, Logger } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { AuthService } from '../services/auth.service';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
   private readonly logger = new Logger(JwtAuthGuard.name);
 
-  constructor(private readonly authService: AuthService) {
-    super();
-  }
-
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    this.logger.log(`Handling request for ${request.url}`);
-    
     const token = request.headers.authorization?.split(' ')[1];
-    if (token && await this.authService.isTokenRevoked(token)) {
-      this.logger.warn('Token has been revoked');
-      throw new UnauthorizedException('Token has been revoked');
+
+    if (!token) {
+      this.logger.warn('Authorization header missing or token not provided');
+      throw new UnauthorizedException('Token missing');
     }
 
-    return super.canActivate(context) as Promise<boolean>;
+    // Chama o método pai para validar o token
+    return (await super.canActivate(context)) as boolean;
   }
 
-  handleRequest(err, user, info) {
+  handleRequest(err: any, user: any, info: any) {
     if (err || !user) {
       this.logger.warn(`Unauthorized request: ${info?.message || err?.message}`);
-      throw err || new UnauthorizedException();
+      throw err || new UnauthorizedException('Invalid or missing token');
     }
-    this.logger.log(`Authenticated user: ${user.name}`);
     return user;
   }
 }

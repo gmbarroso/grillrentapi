@@ -4,7 +4,6 @@ import { CreateBookingDto } from '../dto/create-booking.dto';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { Request } from 'express';
 import { User } from '../../user/entities/user.entity';
-import { AuthService } from '../../../shared/auth/services/auth.service';
 
 interface AuthenticatedRequest extends Request {
   user: User;
@@ -14,23 +13,11 @@ interface AuthenticatedRequest extends Request {
 export class BookingController {
   private readonly logger = new Logger(BookingController.name);
 
-  constructor(
-    private readonly bookingService: BookingService,
-    private readonly authService: AuthService,
-  ) {}
+  constructor(private readonly bookingService: BookingService) {}
 
   @UseGuards(JwtAuthGuard)
   @Post()
   async create(@Body() createBookingDto: CreateBookingDto, @Req() req: AuthenticatedRequest) {
-    const authorizationHeader = req.headers.authorization;
-    if (!authorizationHeader) {
-      throw new UnauthorizedException('Authorization header is missing');
-    }
-    const token = authorizationHeader.split(' ')[1];
-    const isRevoked = await this.authService.isTokenRevoked(token);
-    if (isRevoked) {
-      throw new UnauthorizedException('Token has been revoked');
-    }
     const userId = req.user.id.toString();
     const userRole = req.user.role;
     this.logger.log(`Creating booking for user ID: ${userId}`);
@@ -44,15 +31,6 @@ export class BookingController {
     @Body() updateBookingDto: Partial<CreateBookingDto>,
     @Req() req: AuthenticatedRequest,
   ) {
-    const authorizationHeader = req.headers.authorization;
-    if (!authorizationHeader) {
-      throw new UnauthorizedException('Authorization header is missing');
-    }
-    const token = authorizationHeader.split(' ')[1];
-    const isRevoked = await this.authService.isTokenRevoked(token);
-    if (isRevoked) {
-      throw new UnauthorizedException('Token has been revoked');
-    }
     const userId = req.user.id.toString();
     const userRole = req.user.role;
     this.logger.log(`Updating booking ID: ${id} by user ID: ${userId}`);
@@ -87,15 +65,6 @@ export class BookingController {
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
   async remove(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
-    const authorizationHeader = req.headers.authorization;
-    if (!authorizationHeader) {
-      throw new UnauthorizedException('Authorization header is missing');
-    }
-    const token = authorizationHeader.split(' ')[1];
-    const isRevoked = await this.authService.isTokenRevoked(token);
-    if (isRevoked) {
-      throw new UnauthorizedException('Token has been revoked');
-    }
     const userId = req.user.id.toString();
     this.logger.log(`Removing booking ID: ${id} by user ID: ${userId}`);
     return this.bookingService.remove(id, userId);

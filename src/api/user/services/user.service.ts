@@ -1,7 +1,6 @@
 import { Injectable, UnauthorizedException, Logger, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CreateUserDto } from '../dto/create-user.dto';
 import { LoginUserDto } from '../dto/login-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { User, UserRole } from '../entities/user.entity';
@@ -19,22 +18,6 @@ export class UserService {
     private readonly jwtService: JwtService,
     private readonly authService: AuthService,
   ) {}
-
-  async register(createUserDto: CreateUserDto) {
-    const { name, email, apartment, block, password, role } = createUserDto;
-
-    const existingUser = await this.userRepository.findOne({
-      where: [{ name }, { email }, { apartment, block }],
-    });
-
-    if (existingUser) {
-      throw new ConflictException('Name, email, apartment or block already in use');
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = this.userRepository.create({ ...createUserDto, password: hashedPassword });
-    return this.userRepository.save(user);
-  }
 
   async login(loginUserDto: LoginUserDto) {
     this.logger.log(`Logging in user from apartment: ${loginUserDto.apartment}, block: ${loginUserDto.block}`);
