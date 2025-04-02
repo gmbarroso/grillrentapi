@@ -10,9 +10,12 @@ async function bootstrap() {
   });
   const configService = app.get(ConfigService);
 
+  const allowedOrigins = configService.get<string>('CORS_ORIGINS')?.split(',') || [];
+
   app.enableCors({
-    origin: configService.get<string>('FRONTEND_URL'),
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    origin: allowedOrigins,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type, Authorization',
     credentials: true,
   });
 
