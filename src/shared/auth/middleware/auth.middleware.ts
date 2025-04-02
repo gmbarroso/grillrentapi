@@ -9,7 +9,7 @@ export class AuthMiddleware implements NestMiddleware {
 
   constructor(private readonly jwtService: JwtService) {}
 
-  async use(req: Request, res: Response, next: NextFunction) {
+  use(req: Request, res: Response, next: NextFunction) {
     const authHeader = req.headers.authorization;
     if (!authHeader) {
       this.logger.warn('Authorization header missing');
@@ -17,11 +17,10 @@ export class AuthMiddleware implements NestMiddleware {
     }
 
     const token = authHeader.split(' ')[1];
-    console.log(token);
     try {
       const decoded = this.jwtService.verify(token);
       req.user = decoded as User;
-      this.logger.log(`User authenticated: ${JSON.stringify(req.user)}`);
+      this.logger.log(`Token validated for user: ${decoded.name}`);
       next();
     } catch (err) {
       this.logger.error('Invalid token');

@@ -2,9 +2,9 @@ import { Module, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModule } from './api/user/user.module';
+import { LoggerMiddleware } from './middleware/logger.middleware';
 import { ResourceModule } from './api/resource/resource.module';
 import { BookingModule } from './api/booking/booking.module';
-import { LoggerMiddleware } from './middleware/logger.middleware';
 import { NoticeModule } from './api/notice/notice.module';
 
 @Module({
