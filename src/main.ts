@@ -10,22 +10,31 @@ async function bootstrap() {
   });
   const configService = app.get(ConfigService);
 
-  const allowedOrigins = configService.get<string>('CORS_ORIGINS')?.split(',') || [];
+  app.use((req, res, next) => {
+    console.log(`Request from origin: ${req.headers.origin}`);
+    console.log(`Request method: ${req.method}`);
+    console.log(`Request path: ${req.url}`);
+    next();
+  });
 
   app.enableCors({
-    origin: allowedOrigins,
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    allowedHeaders: 'Content-Type, Authorization',
+    origin: true,
     credentials: true,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type, Accept, Authorization, X-Requested-With',
+    preflightContinue: false,
+    optionsSuccessStatus: 204
   });
 
   app.use((req, res, next) => {
-    res.cookie('token', 'your-jwt-token', {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-      maxAge: 3600000,
-    });
+    if (req.method === 'OPTIONS') {
+      res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+      res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, X-Requested-With');
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.status(204).end();
+      return;
+    }
     next();
   });
 
@@ -35,4 +44,3 @@ async function bootstrap() {
   console.log(`Listening on port ${port}`);
 }
 bootstrap();
-
