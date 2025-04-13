@@ -197,20 +197,27 @@ export class BookingService {
     };
   }
 
-  async findAll(page: number = 1, limit: number = 10, sort: string = 'startTime', order: 'ASC' | 'DESC' = 'ASC') {
-    this.logger.log('Fetching all bookings with pagination and sorting');
-
+  async findAll(
+    page: number = 1,
+    limit: number = 10,
+    sort: string = 'startTime',
+    order: 'ASC' | 'DESC' = 'ASC',
+    startDate?: string,
+    endDate?: string
+  ) {
+    this.logger.log('Fetching all bookings with pagination, sorting, and optional date range');
+  
     const validSortColumns = ['startTime', 'endTime', 'resourceType', 'userApartment'];
     if (!validSortColumns.includes(sort)) {
       throw new BadRequestException(`Invalid sort column: ${sort}`);
     }
-
+  
     const queryBuilder = this.bookingRepository.createQueryBuilder('booking')
       .leftJoinAndSelect('booking.resource', 'resource')
       .leftJoinAndSelect('booking.user', 'user')
       .take(limit)
       .skip((page - 1) * limit);
-
+  
     if (sort === 'resourceType') {
       queryBuilder.orderBy('resource.type', order);
     } else if (sort === 'userApartment') {
@@ -218,9 +225,19 @@ export class BookingService {
     } else {
       queryBuilder.orderBy(`booking.${sort}`, order);
     }
-
+  
+    if (startDate) {
+      const start = new Date(startDate);
+      queryBuilder.andWhere('booking.startTime >= :startDate', { startDate: start });
+    }
+  
+    if (endDate) {
+      const end = new Date(endDate);
+      queryBuilder.andWhere('booking.endTime <= :endDate', { endDate: end });
+    }
+  
     const [bookings, total] = await queryBuilder.getManyAndCount();
-
+  
     return {
       data: bookings.map(booking => ({
         id: booking.id,

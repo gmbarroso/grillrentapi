@@ -79,9 +79,11 @@ export class BookingController {
     @Query('limit') limit: number = 10,
     @Query('sort') sort: string = 'startTime',
     @Query('order') order: 'ASC' | 'DESC' = 'ASC',
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string
   ) {
-    this.logger.log('Fetching all bookings');
-    return this.bookingService.findAll(page, limit, sort, order);
+    this.logger.log(`Fetching all bookings with pagination, sorting, and optional date range`);
+    return this.bookingService.findAll(page, limit, sort, order, startDate, endDate);
   }
 
   @UseGuards(JwtAuthGuard)
