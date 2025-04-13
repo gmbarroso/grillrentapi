@@ -107,10 +107,12 @@ export class BookingController {
   async checkAvailability(
     @Param('resourceId') resourceId: string,
     @Query('startTime') startTime: string,
-    @Query('endTime') endTime: string
+    @Query('endTime') endTime: string,
+    @Req() req: AuthenticatedRequest
   ) {
     this.logger.log(`Checking availability for resource ID: ${resourceId} from ${startTime} to ${endTime}`);
-    return this.bookingService.checkAvailability(resourceId, new Date(startTime), new Date(endTime));
+    const userId = req.user.id.toString();
+    return this.bookingService.checkAvailability(resourceId, new Date(startTime), new Date(endTime), userId);
   }
 
   @UseGuards(JwtAuthGuard)
