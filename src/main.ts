@@ -3,19 +3,39 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
+import { WinstonModule, utilities as nestWinstonModuleUtilities } from 'nest-winston';
+import * as winston from 'winston';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
-    logger: ['log', 'error', 'warn', 'debug', 'verbose'],
-  });
-  const configService = app.get(ConfigService);
+  const isProduction = process.env.NODE_ENV === 'production';
 
-  app.use((req, res, next) => {
-    console.log(`Request from origin: ${req.headers.origin}`);
-    console.log(`Request method: ${req.method}`);
-    console.log(`Request path: ${req.url}`);
-    next();
+  const app = await NestFactory.create(AppModule, {
+    logger: WinstonModule.createLogger({
+      level: isProduction ? 'warn' : 'debug',
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.json(),
+        winston.format.prettyPrint(),
+        nestWinstonModuleUtilities.format.nestLike('GrillRentAPI', { prettyPrint: true }),
+      ),
+      transports: [
+        new winston.transports.Console(),
+        new winston.transports.File({
+          filename: 'logs/error.log',
+          level: 'error',
+          maxsize: 5242880,
+          maxFiles: 5,
+        }),
+        new winston.transports.File({
+          filename: 'logs/combined.log',
+          maxsize: 5242880,
+          maxFiles: 5,
+        }),
+      ],
+    }),
   });
+
+  const configService = app.get(ConfigService);
 
   app.enableCors({
     origin: true,
@@ -23,22 +43,11 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: 'Content-Type, Accept, Authorization, X-Requested-With',
     preflightContinue: false,
-    optionsSuccessStatus: 204
-  });
-
-  app.use((req, res, next) => {
-    if (req.method === 'OPTIONS') {
-      res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-      res.header('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
-      res.header('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, X-Requested-With');
-      res.header('Access-Control-Allow-Credentials', 'true');
-      res.status(204).end();
-      return;
-    }
-    next();
+    optionsSuccessStatus: 204,
   });
 
   app.useGlobalPipes(new ValidationPipe());
+
   const port = configService.get<number>('PORT') || 3000;
   await app.listen(port);
   console.log(`Listening on port ${port}`);

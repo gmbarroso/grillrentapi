@@ -20,7 +20,7 @@ import { NoticeModule } from './api/notice/notice.module';
         url: configService.get<string>('DATABASE_URL'),
         autoLoadEntities: true,
         synchronize: false,
-        logging: true,
+        logging: configService.get<string>('NODE_ENV') !== 'production',
         ssl: {
           rejectUnauthorized: false,
         },
