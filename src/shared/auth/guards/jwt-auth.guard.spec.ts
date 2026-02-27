@@ -2,10 +2,35 @@ import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 describe('JwtAuthGuard', () => {
+  const API_PROTECTED_PATHS = ['/users/profile', '/users', '/resources', '/bookings', '/notices'];
+  const token = 'phase2-token';
+
   let guard: JwtAuthGuard;
+  let authService: { isTokenRevoked: jest.Mock };
+  let parentCanActivateSpy: jest.SpyInstance;
+
+  const createContext = (path: string): ExecutionContext =>
+    ({
+      switchToHttp: () => ({
+        getRequest: () => ({
+          url: path,
+          headers: { authorization: `Bearer ${token}` },
+        }),
+      }),
+    } as unknown as ExecutionContext);
 
   beforeEach(() => {
-    guard = new JwtAuthGuard();
+    authService = {
+      isTokenRevoked: jest.fn(),
+    };
+    guard = new JwtAuthGuard(authService as any);
+    parentCanActivateSpy = jest
+      .spyOn(Object.getPrototypeOf(JwtAuthGuard.prototype), 'canActivate')
+      .mockResolvedValue(true as never);
+  });
+
+  afterEach(() => {
+    parentCanActivateSpy.mockRestore();
   });
 
   it('should be defined', () => {
@@ -13,13 +38,20 @@ describe('JwtAuthGuard', () => {
   });
 
   describe('canActivate', () => {
-    it('should call super.canActivate', () => {
-      const context = {} as ExecutionContext;
-      const canActivateSpy = jest.spyOn(guard, 'canActivate').mockReturnValue(true);
+    it.each(API_PROTECTED_PATHS)('allows token before logout on %s', async (path) => {
+      authService.isTokenRevoked.mockResolvedValue(false);
+      const context = createContext(path);
 
-      const result = guard.canActivate(context);
-      expect(canActivateSpy).toHaveBeenCalledWith(context);
-      expect(result).toBe(true);
+      await expect(guard.canActivate(context)).resolves.toBe(true);
+      expect(authService.isTokenRevoked).toHaveBeenCalledWith(token);
+      expect(parentCanActivateSpy).toHaveBeenCalledWith(context);
+    });
+
+    it.each(API_PROTECTED_PATHS)('denies token after logout on %s', async (path) => {
+      authService.isTokenRevoked.mockResolvedValue(true);
+
+      await expect(guard.canActivate(createContext(path))).rejects.toThrow(UnauthorizedException);
+      await expect(guard.canActivate(createContext(path))).rejects.toThrow('Token has been revoked');
     });
   });
 

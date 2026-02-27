@@ -33,11 +33,12 @@ export class UserController {
 
   @Post('logout')
   async logout(@Req() req) {
-    const token = req.headers.authorization.split(' ')[1];
-    const isRevoked = await this.authService.isTokenRevoked(token);
-    if (isRevoked) {
-      throw new UnauthorizedException('Token has been revoked');
+    const authorizationHeader = req.headers.authorization;
+    const token = authorizationHeader?.split(' ')[1];
+    if (!token) {
+      throw new UnauthorizedException('Authorization token is missing');
     }
+
     this.logger.log('Logging out user');
     return this.authService.logout(token);
   }

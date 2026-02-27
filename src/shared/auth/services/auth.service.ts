@@ -40,7 +40,16 @@ export class AuthService {
   }
 
   async logout(token: string) {
-    const decodedToken = this.jwtService.decode(token) as any;
+    const decodedToken = this.jwtService.decode(token) as { exp?: number } | null;
+    if (!decodedToken?.exp) {
+      throw new UnauthorizedException('Invalid token');
+    }
+
+    const existingRevocation = await this.revokedTokenRepository.findOne({ where: { token } });
+    if (existingRevocation) {
+      return { message: 'Logout successful' };
+    }
+
     const expirationDate = new Date(decodedToken.exp * 1000);
     const revokedToken = this.revokedTokenRepository.create({ token, expirationDate });
     await this.revokedTokenRepository.save(revokedToken);
