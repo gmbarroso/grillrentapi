@@ -134,6 +134,19 @@ describe('BookingController', () => {
       jest.spyOn(service, 'findAll').mockResolvedValue(expectedBookings);
 
       expect(await controller.findAll()).toEqual(expectedBookings);
+      expect(service.findAll).toHaveBeenCalledWith(1, 10, 'startTime', 'ASC', undefined, undefined);
+    });
+
+    it('should forward date range filters', async () => {
+      jest.spyOn(service, 'findAll').mockResolvedValue({
+        data: [],
+        total: 0,
+        page: 1,
+        lastPage: 0,
+      });
+
+      await controller.findAll(1, 20, 'startTime', 'ASC', '2026-02-27', '2026-05-27');
+      expect(service.findAll).toHaveBeenCalledWith(1, 20, 'startTime', 'ASC', '2026-02-27', '2026-05-27');
     });
   });
 

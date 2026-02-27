@@ -195,7 +195,14 @@ export class BookingService {
     };
   }
 
-  async findAll(page: number = 1, limit: number = 10, sort: string = 'startTime', order: 'ASC' | 'DESC' = 'ASC') {
+  async findAll(
+    page: number = 1,
+    limit: number = 10,
+    sort: string = 'startTime',
+    order: 'ASC' | 'DESC' = 'ASC',
+    startDate?: string,
+    endDate?: string,
+  ) {
     this.logger.log('Fetching all bookings with pagination and sorting');
 
     const validSortColumns = ['startTime', 'endTime', 'resourceType', 'userApartment'];
@@ -208,6 +215,22 @@ export class BookingService {
       .leftJoinAndSelect('booking.user', 'user')
       .take(limit)
       .skip((page - 1) * limit);
+
+    if (startDate) {
+      const startDateTime = new Date(`${startDate}T00:00:00.000Z`);
+      if (Number.isNaN(startDateTime.getTime())) {
+        throw new BadRequestException(`Invalid startDate: ${startDate}`);
+      }
+      queryBuilder.andWhere('booking.startTime >= :startDate', { startDate: startDateTime.toISOString() });
+    }
+
+    if (endDate) {
+      const endDateTime = new Date(`${endDate}T23:59:59.999Z`);
+      if (Number.isNaN(endDateTime.getTime())) {
+        throw new BadRequestException(`Invalid endDate: ${endDate}`);
+      }
+      queryBuilder.andWhere('booking.startTime <= :endDate', { endDate: endDateTime.toISOString() });
+    }
 
     if (sort === 'resourceType') {
       queryBuilder.orderBy('resource.type', order);

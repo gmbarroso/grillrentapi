@@ -202,10 +202,51 @@ describe('BookingService', () => {
         userId: booking.userId,
         userApartment: booking.user.apartment,
       }));
-      jest.spyOn(bookingRepository, 'find').mockResolvedValue(bookings as any);
+      const getManyAndCount = jest.fn().mockResolvedValue([bookings, bookings.length]);
+      const orderBy = jest.fn().mockReturnThis();
+      const andWhere = jest.fn().mockReturnThis();
+      const skip = jest.fn().mockReturnThis();
+      const take = jest.fn().mockReturnThis();
+      const leftJoinAndSelect = jest.fn().mockReturnThis();
+      const queryBuilder = {
+        leftJoinAndSelect,
+        take,
+        skip,
+        andWhere,
+        orderBy,
+        getManyAndCount,
+      };
+      jest.spyOn(bookingRepository, 'createQueryBuilder').mockReturnValue(queryBuilder as any);
 
-      const result = await service.findAll();
-      expect(result).toEqual(expectedBookings);
+      const result = await service.findAll(1, 10, 'startTime', 'ASC', '2026-02-27', '2026-05-27');
+      expect(result).toEqual({
+        data: bookings.map(booking => ({
+          id: booking.id,
+          resourceId: booking.resource.id,
+          resourceName: booking.resource.name,
+          resourceType: booking.resource.type,
+          startTime: booking.startTime,
+          endTime: booking.endTime,
+          userId: booking.user.id,
+          userApartment: booking.user.apartment,
+          userBlock: booking.user.block,
+          bookedOnBehalf: booking.bookedOnBehalf,
+          needTablesAndChairs: booking.needTablesAndChairs,
+        })),
+        total: bookings.length,
+        page: 1,
+        lastPage: 1,
+      });
+      expect(andWhere).toHaveBeenCalledWith('booking.startTime >= :startDate', { startDate: '2026-02-27T00:00:00.000Z' });
+      expect(andWhere).toHaveBeenCalledWith('booking.startTime <= :endDate', { endDate: '2026-05-27T23:59:59.999Z' });
+    });
+
+    it('should throw when startDate is invalid', async () => {
+      await expect(service.findAll(1, 10, 'startTime', 'ASC', 'invalid-date')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw when endDate is invalid', async () => {
+      await expect(service.findAll(1, 10, 'startTime', 'ASC', undefined, 'invalid-date')).rejects.toThrow(BadRequestException);
     });
   });
 
