@@ -4,6 +4,9 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 describe('API JwtAuthGuard', () => {
   const API_PROTECTED_PATHS = ['/users/profile', '/users', '/resources', '/bookings', '/notices'];
   const token = 'phase6-token';
+  const revokedTokenRepository = {
+    findOne: jest.fn(),
+  };
 
   let guard: JwtAuthGuard;
   let parentCanActivateSpy: jest.SpyInstance;
@@ -19,7 +22,8 @@ describe('API JwtAuthGuard', () => {
     } as unknown as ExecutionContext);
 
   beforeEach(() => {
-    guard = new JwtAuthGuard();
+    revokedTokenRepository.findOne.mockResolvedValue(null);
+    guard = new JwtAuthGuard(revokedTokenRepository as any);
     parentCanActivateSpy = jest
       .spyOn(Object.getPrototypeOf(JwtAuthGuard.prototype), 'canActivate')
       .mockResolvedValue(true as never);
@@ -38,6 +42,14 @@ describe('API JwtAuthGuard', () => {
     const context = createContext(path, token);
     await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(parentCanActivateSpy).toHaveBeenCalledWith(context);
+    expect(revokedTokenRepository.findOne).toHaveBeenCalledWith({ where: { token } });
+  });
+
+  it.each(API_PROTECTED_PATHS)('denies revoked token on %s', async (path) => {
+    revokedTokenRepository.findOne.mockResolvedValue({ id: 'revoked-entry' });
+
+    await expect(guard.canActivate(createContext(path, token))).rejects.toThrow(UnauthorizedException);
+    await expect(guard.canActivate(createContext(path, token))).rejects.toThrow('Token has been revoked');
   });
 
   it('maps missing user to canonical auth error', () => {

@@ -1,11 +1,17 @@
 import { Injectable, ExecutionContext, UnauthorizedException, Logger } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { RevokedToken } from '../entities/revoked-token.entity';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
   private readonly logger = new Logger(JwtAuthGuard.name);
 
-  constructor() {
+  constructor(
+    @InjectRepository(RevokedToken)
+    private readonly revokedTokenRepository: Repository<RevokedToken>,
+  ) {
     super();
   }
 
@@ -17,6 +23,12 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     if (!token) {
       this.logger.warn('Token not provided');
       throw new UnauthorizedException('Token not provided');
+    }
+
+    const isRevoked = await this.revokedTokenRepository.findOne({ where: { token } });
+    if (isRevoked) {
+      this.logger.warn('Token has been revoked');
+      throw new UnauthorizedException('Token has been revoked');
     }
 
     return super.canActivate(context) as Promise<boolean>;

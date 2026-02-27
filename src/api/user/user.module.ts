@@ -8,10 +8,11 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from '../../shared/auth/strategies/jwt.strategy';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { resolveJwtSecret } from '../../shared/auth/jwt-secret.policy';
+import { RevokedToken } from '../../shared/auth/entities/revoked-token.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([User, RevokedToken]),
     PassportModule,
     JwtModule.registerAsync({
       global: true,
