@@ -53,6 +53,17 @@ describe('JwtAuthGuard', () => {
       await expect(guard.canActivate(createContext(path))).rejects.toThrow(UnauthorizedException);
       await expect(guard.canActivate(createContext(path))).rejects.toThrow('Token has been revoked');
     });
+
+    it.each(API_PROTECTED_PATHS)(
+      'post-cleanup, expired token without revoked record remains denied on %s',
+      async (path) => {
+        authService.isTokenRevoked.mockResolvedValue(false);
+        parentCanActivateSpy.mockRejectedValue(new UnauthorizedException('jwt expired'));
+
+        await expect(guard.canActivate(createContext(path))).rejects.toThrow('jwt expired');
+        expect(authService.isTokenRevoked).toHaveBeenCalledWith(token);
+      },
+    );
   });
 
   describe('handleRequest', () => {
