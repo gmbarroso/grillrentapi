@@ -6,6 +6,7 @@ import { User, UserRole } from '../../../api/user/entities/user.entity';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { UnauthorizedException } from '@nestjs/common';
+import { RevokedToken } from '../entities/revoked-token.entity';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -25,6 +26,10 @@ describe('AuthService', () => {
           useValue: {
             sign: jest.fn().mockReturnValue('jwt-token'),
           },
+        },
+        {
+          provide: getRepositoryToken(RevokedToken),
+          useClass: Repository,
         },
       ],
     }).compile();
