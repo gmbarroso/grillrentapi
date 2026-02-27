@@ -1,22 +1,17 @@
-import { Controller, Post, Body, Logger, Get, Put, Delete, Param, Req, UseGuards, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Body, Logger, Get, Put, Delete, Param, Req, UseGuards, ForbiddenException, UnauthorizedException, GoneException } from '@nestjs/common';
 import { CreateUserDto, CreateUserSchema } from '../dto/create-user.dto';
-import { LoginUserDto, LoginUserSchema } from '../dto/login-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { UserService } from '../services/user.service';
 import { JoiValidationPipe } from '../../../shared/pipes/joi-validation.pipe';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { User } from '../../../shared/auth/decorators/user.decorator';
 import { User as UserEntity, UserRole } from '../entities/user.entity';
-import { AuthService } from '../../../shared/auth/services/auth.service';
 
 @Controller('users')
 export class UserController {
   private readonly logger = new Logger(UserController.name);
 
-  constructor(
-    private readonly userService: UserService,
-    private readonly authService: AuthService
-  ) {}
+  constructor(private readonly userService: UserService) {}
 
   @Post('register')
   async register(@Body(new JoiValidationPipe(CreateUserSchema)) createUserDto: CreateUserDto) {
@@ -26,21 +21,13 @@ export class UserController {
   }
 
   @Post('login')
-  async login(@Body(new JoiValidationPipe(LoginUserSchema)) loginUserDto: LoginUserDto) {
-    this.logger.log(`Logging in user from apartment: ${loginUserDto.apartment}, block: ${loginUserDto.block}`);
-    return this.authService.login(loginUserDto);
+  async login() {
+    throw new GoneException('This endpoint is deprecated. Use POST /users/login in grillrentbff_v2.');
   }
 
   @Post('logout')
-  async logout(@Req() req) {
-    const authorizationHeader = req.headers.authorization;
-    const token = authorizationHeader?.split(' ')[1];
-    if (!token) {
-      throw new UnauthorizedException('Authorization token is missing');
-    }
-
-    this.logger.log('Logging out user');
-    return this.authService.logout(token);
+  async logout() {
+    throw new GoneException('This endpoint is deprecated. Use POST /users/logout in grillrentbff_v2.');
   }
 
   @UseGuards(JwtAuthGuard)

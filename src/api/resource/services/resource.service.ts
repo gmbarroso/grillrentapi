@@ -4,7 +4,6 @@ import { Repository } from 'typeorm';
 import { CreateResourceDto } from '../dto/create-resource.dto';
 import { UpdateResourceDto } from '../dto/update-resource.dto';
 import { Resource } from '../entities/resource.entity';
-import { AuthService } from '../../../shared/auth/services/auth.service';
 
 @Injectable()
 export class ResourceService {
@@ -13,7 +12,6 @@ export class ResourceService {
   constructor(
     @InjectRepository(Resource)
     private readonly resourceRepository: Repository<Resource>,
-    private readonly authService: AuthService,
   ) {}
 
   async create(createResourceDto: CreateResourceDto) {

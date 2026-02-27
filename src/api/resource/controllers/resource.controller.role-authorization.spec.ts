@@ -3,9 +3,6 @@ import { ResourceController } from './resource.controller';
 import { UserRole } from '../../user/entities/user.entity';
 
 describe('Phase 5 - API role authorization regression', () => {
-  const authService = {
-    isTokenRevoked: jest.fn(async () => false),
-  };
   const resourceService = {
     create: jest.fn(async (dto) => ({ id: 'resource-1', ...dto })),
     update: jest.fn(async (id, dto) => ({ id, ...dto })),
@@ -34,39 +31,32 @@ describe('Phase 5 - API role authorization regression', () => {
     role: UserRole.RESIDENT,
   };
 
-  const req = {
-    headers: {
-      authorization: 'Bearer phase5-token',
-    },
-  } as any;
-
   let controller: ResourceController;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    controller = new ResourceController(resourceService as any, authService as any);
+    controller = new ResourceController(resourceService as any);
   });
 
   it('allows admin and denies resident on protected write operations', async () => {
     await expect(
-      controller.create(adminUser as any, { name: 'Grill', type: 'common' }, req),
+      controller.create(adminUser as any, { name: 'Grill', type: 'common' }),
     ).resolves.toEqual({ id: 'resource-1', name: 'Grill', type: 'common' });
     await expect(
-      controller.update(adminUser as any, 'resource-1', { name: 'Updated Grill' }, req),
+      controller.update(adminUser as any, 'resource-1', { name: 'Updated Grill' }),
     ).resolves.toEqual({ id: 'resource-1', name: 'Updated Grill' });
     await expect(
-      controller.remove(adminUser as any, 'resource-1', req),
+      controller.remove(adminUser as any, 'resource-1'),
     ).resolves.toEqual({ message: 'removed:resource-1' });
 
     await expect(
-      controller.create(residentUser as any, { name: 'Grill', type: 'common' }, req),
+      controller.create(residentUser as any, { name: 'Grill', type: 'common' }),
     ).rejects.toThrow(ForbiddenException);
     await expect(
-      controller.update(residentUser as any, 'resource-1', { name: 'Updated Grill' }, req),
+      controller.update(residentUser as any, 'resource-1', { name: 'Updated Grill' }),
     ).rejects.toThrow(ForbiddenException);
     await expect(
-      controller.remove(residentUser as any, 'resource-1', req),
+      controller.remove(residentUser as any, 'resource-1'),
     ).rejects.toThrow(ForbiddenException);
   });
 });
-

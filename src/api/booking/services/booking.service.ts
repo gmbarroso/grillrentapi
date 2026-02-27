@@ -6,7 +6,6 @@ import { ResourceService } from '../../resource/services/resource.service';
 import { Booking } from '../entities/booking.entity';
 import { User, UserRole } from '../../user/entities/user.entity';
 import { Resource } from '../../resource/entities/resource.entity';
-import { AuthService } from '../../../shared/auth/services/auth.service';
 
 @Injectable()
 export class BookingService {
@@ -20,7 +19,6 @@ export class BookingService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly resourceService: ResourceService,
-    private readonly authService: AuthService,
   ) {}
 
   async create(createBookingDto: CreateBookingDto, userId: string, userRole: string) {
