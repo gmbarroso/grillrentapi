@@ -2,9 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BookingController } from './booking.controller';
 import { BookingService } from '../services/booking.service';
 import { CreateBookingDto } from '../dto/create-booking.dto';
-import { User, UserRole } from '../../user/entities/user.entity';
-import { Booking } from '../entities/booking.entity';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
+import { UserRole } from '../../user/entities/user.entity';
 
 describe('BookingController', () => {
   let controller: BookingController;
@@ -18,17 +17,19 @@ describe('BookingController', () => {
           provide: BookingService,
           useValue: {
             create: jest.fn(),
+            update: jest.fn(),
             findAll: jest.fn(),
             findByUser: jest.fn(),
             remove: jest.fn(),
             checkAvailability: jest.fn(),
+            getReservedTimes: jest.fn(),
           },
         },
       ],
     })
-    .overrideGuard(JwtAuthGuard)
-    .useValue({ canActivate: () => true })
-    .compile();
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<BookingController>(BookingController);
     service = module.get<BookingService>(BookingService) as jest.Mocked<BookingService>;
@@ -38,161 +39,58 @@ describe('BookingController', () => {
     expect(controller).toBeDefined();
   });
 
-  describe('create', () => {
-    it('should create a booking', async () => {
-      const createBookingDto: CreateBookingDto = {
-        resourceId: '1',
-        userId: '1',
-        startTime: new Date(),
-        endTime: new Date(),
-      };
-      const booking: Booking = { 
-        id: '1', 
-        ...createBookingDto, 
-        user: { 
-          id: '1', 
-          name: 'Test User', 
-          password: 'password', 
-          email: 'test@example.com', 
-          apartment: '101',
-          block: 1,
-          role: UserRole.RESIDENT
-        }, 
-        resource: {
-          id: '1',
-          name: 'Test Resource',
-          type: 'Test Type',
-          bookings: [] 
-        }
-      };
-      const result = { message: 'Booking created successfully', booking };
-      const req = { user: { id: '1', name: 'Test User', password: 'password', email: 'test@example.com', apartment: '101' } };
+  it('creates booking using authenticated user id and role', async () => {
+    const dto: CreateBookingDto = {
+      resourceId: 'resource-1',
+      userId: 'ignored-by-controller',
+      startTime: new Date('2026-06-10T12:00:00.000Z'),
+      endTime: new Date('2026-06-10T15:00:00.000Z'),
+      needTablesAndChairs: true,
+    };
+    const req = { user: { id: 'user-1', role: UserRole.ADMIN } };
+    const payload = { message: 'Booking created successfully', booking: { id: 'booking-1' } };
+    service.create.mockResolvedValue(payload as any);
 
-      jest.spyOn(service, 'create').mockResolvedValue(result);
-
-      expect(await controller.create(createBookingDto, req as any)).toBe(result);
-    });
+    await expect(controller.create(dto, req as any)).resolves.toEqual(payload);
+    expect(service.create).toHaveBeenCalledWith(dto, 'user-1', UserRole.ADMIN);
   });
 
-  describe('findAll', () => {
-    it('should find all bookings', async () => {
-      const bookings: Booking[] = [
-        { 
-          id: '1', 
-          resourceId: '1', 
-          userId: '1',
-          startTime: new Date(), 
-          endTime: new Date(),
-          user: { 
-            id: '1', 
-            name: 'Test User', 
-            password: 'password', 
-            email: 'test@example.com', 
-            apartment: '101',
-            block: 1,
-            role: UserRole.RESIDENT
-          },
-          resource: {
-            id: '1',
-            name: 'Test Resource',
-            type: 'Test Type',
-            bookings: [] 
-          }
-        },
-        { 
-          id: '2', 
-          resourceId: '2', 
-          userId: '2',
-          startTime: new Date(), 
-          endTime: new Date(),
-          user: { 
-            id: '2', 
-            name: 'Test User 2', 
-            apartment: '102',
-            block: 1,
-            role: UserRole.RESIDENT,
-            email: 'test2@example.com',
-            password: 'password'
-          },
-          resource: {
-            id: '2',
-            name: 'Test Resource 2',
-            type: 'Test Type 2',
-            bookings: [] 
-          }
-        },
-      ];
-      const expectedBookings = bookings.map(booking => ({
-        id: booking.id,
-        resourceId: booking.resourceId,
-        resourceName: booking.resource.name,
-        startTime: booking.startTime,
-        endTime: booking.endTime,
-        userId: booking.userId,
-        userApartment: booking.user.apartment,
-      }));
-      jest.spyOn(service, 'findAll').mockResolvedValue(expectedBookings);
+  it('forwards findAll query params with defaults', async () => {
+    const payload = { data: [], total: 0, page: 1, lastPage: 0 };
+    service.findAll.mockResolvedValue(payload);
 
-      expect(await controller.findAll()).toEqual(expectedBookings);
-    });
+    await expect(controller.findAll()).resolves.toEqual(payload);
+    expect(service.findAll).toHaveBeenCalledWith(1, 10, 'startTime', 'ASC', undefined, undefined);
   });
 
-  describe('findByUser', () => {
-    it('should find bookings by user', async () => {
-      const bookings: Booking[] = [
-        {
-          id: '1',
-          resourceId: '1',
-          userId: '1',
-          startTime: new Date(),
-          endTime: new Date(),
-          user: { 
-            id: '2', 
-            name: 'Test User 2', 
-            apartment: '102',
-            block: 1,
-            role: UserRole.RESIDENT,
-            email: 'test2@example.com',
-            password: 'password'
-          },
-          resource: {
-            id: '1',
-            name: 'Test Resource',
-            type: 'Test Type',
-            bookings: [] 
-          },
-        },
-      ];
-      const expectedBookings = bookings.map(booking => ({
-        id: booking.id,
-        resourceId: booking.resourceId,
-        resourceName: booking.resource.name,
-        startTime: booking.startTime,
-        endTime: booking.endTime,
-        userId: booking.userId,
-        userApartment: booking.user.apartment,
-      }));
-      jest.spyOn(service, 'findByUser').mockResolvedValue(expectedBookings);
+  it('forwards findByUser query params', async () => {
+    const payload = { data: [], total: 0, page: 1, lastPage: 0 };
+    service.findByUser.mockResolvedValue(payload as any);
 
-      expect(await controller.findByUser('1')).toEqual(expectedBookings);
-    });
+    await expect(controller.findByUser('user-1', 2, 20, 'endTime', 'DESC')).resolves.toEqual(payload);
+    expect(service.findByUser).toHaveBeenCalledWith('user-1', 2, 20, 'endTime', 'DESC');
   });
 
-  describe('remove', () => {
-    it('should remove a booking', async () => {
-      const result = { message: 'Booking removed successfully' };
-      jest.spyOn(service, 'remove').mockResolvedValue(result);
+  it('removes booking with authenticated user id', async () => {
+    const payload = { message: 'Booking removed successfully' };
+    service.remove.mockResolvedValue(payload);
 
-      expect(await controller.remove('1')).toEqual(result);
-    });
+    await expect(controller.remove('booking-1', { user: { id: 'user-1' } } as any)).resolves.toEqual(payload);
+    expect(service.remove).toHaveBeenCalledWith('booking-1', 'user-1');
   });
 
-  describe('checkAvailability', () => {
-    it('should check availability of a resource', async () => {
-      const result = { available: true, message: 'Available' };
-      jest.spyOn(service, 'checkAvailability').mockResolvedValue(result);
+  it('checks availability with Date conversion', async () => {
+    const payload = { available: true, message: 'Available' };
+    service.checkAvailability.mockResolvedValue(payload);
 
-      expect(await controller.checkAvailability('1', '2025-02-12T10:00:00Z', '2025-02-12T12:00:00Z')).toBe(result);
-    });
+    await expect(
+      controller.checkAvailability('resource-1', '2026-06-10T12:00:00.000Z', '2026-06-10T15:00:00.000Z'),
+    ).resolves.toEqual(payload);
+
+    expect(service.checkAvailability).toHaveBeenCalledWith(
+      'resource-1',
+      new Date('2026-06-10T12:00:00.000Z'),
+      new Date('2026-06-10T15:00:00.000Z'),
+    );
   });
 });

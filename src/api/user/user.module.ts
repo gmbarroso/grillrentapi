@@ -3,28 +3,32 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserService } from './services/user.service';
 import { UserController } from './controllers/user.controller';
 import { User } from './entities/user.entity';
-import { AuthService } from '../../shared/auth/services/auth.service';
-import { RevokedToken } from '../../shared/auth/entities/revoked-token.entity';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from '../../shared/auth/strategies/jwt.strategy';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { resolveJwtSecret } from '../../shared/auth/jwt-secret.policy';
+import { RevokedToken } from '../../shared/auth/entities/revoked-token.entity';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, RevokedToken]),
     PassportModule,
     JwtModule.registerAsync({
+      global: true,
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
+        secret: resolveJwtSecret(
+          configService.get<string>('JWT_SECRET'),
+          configService.get<string>('NODE_ENV'),
+        ),
         signOptions: { expiresIn: '60m' },
       }),
       inject: [ConfigService],
     }),
   ],
   controllers: [UserController],
-  providers: [UserService, AuthService, JwtStrategy],
-  exports: [UserService, AuthService, TypeOrmModule],
+  providers: [UserService, JwtStrategy],
+  exports: [UserService, TypeOrmModule],
 })
 export class UserModule {}

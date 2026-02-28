@@ -20,7 +20,7 @@ describe('JwtStrategy', () => {
 
   describe('validate', () => {
     it('should return the payload', async () => {
-      const payload = { sub: '1', name: 'Test User', role: 'admin' };
+      const payload = { sub: '1', name: 'Test User', role: 'admin', exp: 9999999999 };
       const result = await strategy.validate(payload);
       expect(result).toEqual({ id: '1', name: 'Test User', role: 'admin' });
     });

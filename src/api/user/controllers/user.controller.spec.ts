@@ -3,11 +3,10 @@ import { UserController } from './user.controller';
 import { UserService } from '../services/user.service';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { CreateUserDto, CreateUserSchema } from '../dto/create-user.dto';
-import { LoginUserDto, LoginUserSchema } from '../dto/login-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { User, UserRole } from '../entities/user.entity';
 import { JoiValidationPipe } from '../../../shared/pipes/joi-validation.pipe';
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, GoneException } from '@nestjs/common';
 
 describe('UserController', () => {
   let controller: UserController;
@@ -21,7 +20,6 @@ describe('UserController', () => {
           provide: UserService,
           useValue: {
             register: jest.fn(),
-            login: jest.fn(),
             getProfile: jest.fn(),
             updateProfile: jest.fn(),
             getAllUsers: jest.fn(),
@@ -62,17 +60,14 @@ describe('UserController', () => {
   });
 
   describe('login', () => {
-    it('should login a user', async () => {
-      const loginUserDto: LoginUserDto = {
-        apartment: '101',
-        block: 1,
-        password: 'password123', // 8 characters
-      };
-      const result = { message: 'User logged in successfully', token: 'jwt-token' };
-      jest.spyOn(service, 'login').mockResolvedValue(result);
+    it('should reject client-facing login because BFF owns auth ingress', async () => {
+      await expect(controller.login()).rejects.toThrow(GoneException);
+    });
+  });
 
-      const validationPipe = new JoiValidationPipe(LoginUserSchema);
-      expect(await controller.login(validationPipe.transform(loginUserDto, { type: 'body' }))).toBe(result);
+  describe('logout', () => {
+    it('should reject client-facing logout because BFF owns auth ingress', async () => {
+      await expect(controller.logout()).rejects.toThrow(GoneException);
     });
   });
 
@@ -115,9 +110,10 @@ describe('UserController', () => {
         apartment: '102',
       };
       const result = { message: 'User profile updated successfully', user: updatedUser };
-      jest.spyOn(service, 'updateProfile').mockResolvedValue(result);
+      jest.spyOn(service, 'updateProfile').mockResolvedValue(updatedUser as any);
+      const req = { user } as any;
 
-      expect(await controller.updateProfile(user, updateUserDto)).toBe(result);
+      expect(await controller.updateProfile(req, updateUserDto)).toEqual(result);
     });
   });
 

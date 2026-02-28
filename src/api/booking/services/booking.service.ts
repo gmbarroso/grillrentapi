@@ -6,7 +6,6 @@ import { ResourceService } from '../../resource/services/resource.service';
 import { Booking } from '../entities/booking.entity';
 import { User, UserRole } from '../../user/entities/user.entity';
 import { Resource } from '../../resource/entities/resource.entity';
-import { AuthService } from '../../../shared/auth/services/auth.service';
 
 @Injectable()
 export class BookingService {
@@ -20,7 +19,6 @@ export class BookingService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly resourceService: ResourceService,
-    private readonly authService: AuthService,
   ) {}
 
   async create(createBookingDto: CreateBookingDto, userId: string, userRole: string) {
@@ -55,7 +53,7 @@ export class BookingService {
     }
 
     // Verificar disponibilidade
-    const isAvailable = await this.checkAvailability(resourceId, new Date(startTime), new Date(endTime), userId);
+    const isAvailable = await this.checkAvailability(resourceId, new Date(startTime), new Date(endTime));
 
     if (!isAvailable.available) {
       this.logger.warn(`Resource ID: ${resourceId} is not available from ${startTime} to ${endTime}`);
@@ -120,8 +118,8 @@ export class BookingService {
     return { message: 'Booking updated successfully', booking };
   }
 
-  async checkAvailability(resourceId: string, startTime: Date, endTime: Date, userId: string) {
-    this.logger.log(`Checking for existing bookings for resource ID: ${resourceId} from ${startTime} to ${endTime} by user ID: ${userId}`);
+  async checkAvailability(resourceId: string, startTime: Date, endTime: Date) {
+    this.logger.log(`Checking for existing bookings for resource ID: ${resourceId} from ${startTime} to ${endTime}`);
     
     const resource = await this.resourceRepository.findOne({ where: { id: resourceId } });
     if (!resource) {
@@ -134,28 +132,17 @@ export class BookingService {
       relations: ['user'],
     });
   
-    // Verificação específica para o tipo "tennis" e usuários do tipo "resident"
-    if (resource.type === 'tennis') {
+    // Verificação específica para o tipo "grill"
+    if (resource.type === 'grill') {
       const bookingDate = startTime.toISOString().split('T')[0];
-      const userBookingsOnSameDay = existingBookings.filter(booking => {
+      const hasBookingOnSameDay = existingBookings.some(booking => {
         const existingBookingDate = new Date(booking.startTime).toISOString().split('T')[0];
-        return existingBookingDate === bookingDate && booking.user.id === userId;
+        return existingBookingDate === bookingDate;
       });
   
-      // Calcular o total de horas reservadas pelo usuário no mesmo dia
-      const totalReservedHours = userBookingsOnSameDay.reduce((total, booking) => {
-        const existingStartTime = new Date(booking.startTime);
-        const existingEndTime = new Date(booking.endTime);
-        const hours = (existingEndTime.getTime() - existingStartTime.getTime()) / (1000 * 60 * 60); // Converter milissegundos para horas
-        return total + hours;
-      }, 0);
-  
-      // Calcular a duração da nova reserva
-      const newBookingHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
-  
-      if (totalReservedHours + newBookingHours > 2) {
-        this.logger.warn(`User ID: ${userId} has exceeded the 2-hour booking limit for resource type "tennis" on ${bookingDate}`);
-        return { available: false, message: `You cannot reserve more than 2 hours for tennis on the same day` };
+      if (hasBookingOnSameDay) {
+        this.logger.warn(`Resource ID: ${resourceId} (type: grill) already has a booking on ${bookingDate}`);
+        return { available: false, message: `Resource of type "grill" is already booked on ${bookingDate}` };
       }
     }
   
@@ -183,12 +170,12 @@ export class BookingService {
       relations: ['resource', 'user'],
       take: limit,
       skip: (page - 1) * limit,
-      order: { 
+      order: {
         [sort]: order,
       },
     };
     const [bookings, total] = await this.bookingRepository.findAndCount(options);
-    return { 
+    return {
       data: bookings.map(booking => ({
         id: booking.id,
         resourceId: booking.resource.id,
@@ -214,21 +201,37 @@ export class BookingService {
     sort: string = 'startTime',
     order: 'ASC' | 'DESC' = 'ASC',
     startDate?: string,
-    endDate?: string
+    endDate?: string,
   ) {
-    this.logger.log('Fetching all bookings with pagination, sorting, and optional date range');
-  
+    this.logger.log('Fetching all bookings with pagination and sorting');
+
     const validSortColumns = ['startTime', 'endTime', 'resourceType', 'userApartment'];
     if (!validSortColumns.includes(sort)) {
       throw new BadRequestException(`Invalid sort column: ${sort}`);
     }
-  
+
     const queryBuilder = this.bookingRepository.createQueryBuilder('booking')
       .leftJoinAndSelect('booking.resource', 'resource')
       .leftJoinAndSelect('booking.user', 'user')
       .take(limit)
       .skip((page - 1) * limit);
-  
+
+    if (startDate) {
+      const startDateTime = new Date(`${startDate}T00:00:00.000Z`);
+      if (Number.isNaN(startDateTime.getTime())) {
+        throw new BadRequestException(`Invalid startDate: ${startDate}`);
+      }
+      queryBuilder.andWhere('booking.startTime >= :startDate', { startDate: startDateTime.toISOString() });
+    }
+
+    if (endDate) {
+      const endDateTime = new Date(`${endDate}T23:59:59.999Z`);
+      if (Number.isNaN(endDateTime.getTime())) {
+        throw new BadRequestException(`Invalid endDate: ${endDate}`);
+      }
+      queryBuilder.andWhere('booking.startTime <= :endDate', { endDate: endDateTime.toISOString() });
+    }
+
     if (sort === 'resourceType') {
       queryBuilder.orderBy('resource.type', order);
     } else if (sort === 'userApartment') {
@@ -236,20 +239,10 @@ export class BookingService {
     } else {
       queryBuilder.orderBy(`booking.${sort}`, order);
     }
-  
-    if (startDate) {
-      const start = new Date(startDate);
-      queryBuilder.andWhere('booking.startTime >= :startDate', { startDate: start });
-    }
-  
-    if (endDate) {
-      const end = new Date(endDate);
-      queryBuilder.andWhere('booking.endTime <= :endDate', { endDate: end });
-    }
-  
+
     const [bookings, total] = await queryBuilder.getManyAndCount();
-  
-    return { 
+
+    return {
       data: bookings.map(booking => ({
         id: booking.id,
         resourceId: booking.resource.id,
@@ -271,6 +264,7 @@ export class BookingService {
 
   async remove(bookingId: string, userId: string) {
     this.logger.log(`Removing booking ID: ${bookingId} by user ID: ${userId}`);
+    
     const booking = await this.bookingRepository.findOne({ where: { id: bookingId }, relations: ['user'] });
     if (!booking) {
       this.logger.warn(`Booking not found: ${bookingId}`);
@@ -295,6 +289,7 @@ export class BookingService {
 
   async getReservedTimes(resourceType: string, date?: string) {
     this.logger.log(`Fetching reserved times for resourceType: ${resourceType}${date ? ` on date: ${date}` : ''}`);
+
     const resources = await this.resourceRepository.find({ where: { type: resourceType } });
     if (resources.length === 0) {
       this.logger.warn(`No resources found for type: ${resourceType}`);

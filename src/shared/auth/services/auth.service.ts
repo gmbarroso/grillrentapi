@@ -32,13 +32,24 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
     const payload = { name: user.name, sub: user.id, role: user.role };
+    const token = this.jwtService.sign(payload);
     return {
-      access_token: this.jwtService.sign(payload),
+      token,
+      access_token: token,
     };
   }
 
   async logout(token: string) {
-    const decodedToken = this.jwtService.decode(token) as any;
+    const decodedToken = this.jwtService.decode(token) as { exp?: number } | null;
+    if (!decodedToken?.exp) {
+      throw new UnauthorizedException('Invalid token');
+    }
+
+    const existingRevocation = await this.revokedTokenRepository.findOne({ where: { token } });
+    if (existingRevocation) {
+      return { message: 'Logout successful' };
+    }
+
     const expirationDate = new Date(decodedToken.exp * 1000);
     const revokedToken = this.revokedTokenRepository.create({ token, expirationDate });
     await this.revokedTokenRepository.save(revokedToken);
