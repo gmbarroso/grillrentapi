@@ -10,11 +10,14 @@ export function resolveJwtSecret(
     return normalizedSecret;
   }
 
-  const normalizedEnv = (nodeEnv ?? 'development').toLowerCase();
+  const normalizedEnv = (nodeEnv ?? '').trim().toLowerCase();
+  if (!normalizedEnv) {
+    throw new Error('JWT_SECRET is required when NODE_ENV is missing');
+  }
+
   if (LOCAL_ENVIRONMENTS.has(normalizedEnv)) {
     return LOCAL_FALLBACK_JWT_SECRET;
   }
 
   throw new Error(`JWT_SECRET is required when NODE_ENV=${normalizedEnv}`);
 }
-

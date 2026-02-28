@@ -37,6 +37,12 @@ describe('API JwtAuthGuard', () => {
     } as unknown as ExecutionContext);
 
   beforeEach(() => {
+    jest.clearAllMocks();
+    configService.get.mockImplementation((key: string): string | undefined => {
+      if (key === 'INTERNAL_SERVICE_TOKEN') return 'internal-secret';
+      if (key === 'NODE_ENV') return 'production';
+      return undefined;
+    });
     revokedTokenRepository.findOne.mockResolvedValue(null);
     guard = new JwtAuthGuard(revokedTokenRepository as any, configService as any, securityObservability as any);
     parentCanActivateSpy = jest
@@ -63,6 +69,19 @@ describe('API JwtAuthGuard', () => {
     });
     guard = new JwtAuthGuard(revokedTokenRepository as any, configService as any, securityObservability as any);
     await expect(guard.canActivate(createContext('/users/profile', token, ''))).resolves.toBe(true);
+  });
+
+  it('enforces internal token when NODE_ENV is missing', async () => {
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'NODE_ENV') return undefined;
+      if (key === 'INTERNAL_SERVICE_TOKEN') return undefined;
+      return undefined;
+    });
+    guard = new JwtAuthGuard(revokedTokenRepository as any, configService as any, securityObservability as any);
+    await expect(guard.canActivate(createContext('/users/profile', token, ''))).rejects.toThrow(
+      UnauthorizedException,
+    );
+    expect(securityObservability.recordInternalTrustDenial).toHaveBeenCalledWith('/users/profile');
   });
 
   it.each(API_PROTECTED_PATHS)('denies request without token on %s', async (path) => {

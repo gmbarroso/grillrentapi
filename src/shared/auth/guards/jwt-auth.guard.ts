@@ -11,6 +11,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   private readonly logger = new Logger(JwtAuthGuard.name);
   private readonly internalServiceToken?: string;
   private readonly enforceInternalServiceToken: boolean;
+  private static readonly NON_ENFORCING_ENVS = new Set(['local', 'development', 'dev', 'test']);
 
   constructor(
     @InjectRepository(RevokedToken)
@@ -20,8 +21,12 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   ) {
     super();
     this.internalServiceToken = this.configService.get<string>('INTERNAL_SERVICE_TOKEN') || undefined;
-    const nodeEnv = (this.configService.get<string>('NODE_ENV') || '').toLowerCase();
-    this.enforceInternalServiceToken = nodeEnv === 'production' || nodeEnv === 'staging';
+    const rawNodeEnv = this.configService.get<string>('NODE_ENV');
+    const nodeEnv = (rawNodeEnv || '').trim().toLowerCase();
+    if (!nodeEnv) {
+      this.logger.warn('NODE_ENV is not set; enforcing internal service token validation by default');
+    }
+    this.enforceInternalServiceToken = !JwtAuthGuard.NON_ENFORCING_ENVS.has(nodeEnv);
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

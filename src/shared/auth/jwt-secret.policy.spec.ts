@@ -13,6 +13,12 @@ describe('resolveJwtSecret', () => {
     expect(resolveJwtSecret(undefined, 'development')).toBe('local-dev-jwt-secret');
   });
 
+  it('throws when NODE_ENV is missing and secret is missing', () => {
+    expect(() => resolveJwtSecret(undefined, '')).toThrow(
+      'JWT_SECRET is required when NODE_ENV is missing',
+    );
+  });
+
   it('throws in production when secret is missing', () => {
     expect(() => resolveJwtSecret(undefined, 'production')).toThrow(
       'JWT_SECRET is required when NODE_ENV=production',

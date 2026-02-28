@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { ValidationPipe } from '@nestjs/common';
+import { LogLevel, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
@@ -10,6 +10,8 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://127.0.0.1:3000',
   'http://127.0.0.1:5173',
 ];
+
+const readNodeEnv = (): string => (process.env.NODE_ENV || '').trim().toLowerCase();
 
 const parseAllowedOrigins = (): string[] => {
   const rawOrigins =
@@ -22,12 +24,21 @@ const parseAllowedOrigins = (): string[] => {
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-  return Array.from(new Set([...DEFAULT_ALLOWED_ORIGINS, ...fromEnv]));
+  const nodeEnv = readNodeEnv();
+  const isLocalLikeEnv = nodeEnv === 'local' || nodeEnv === 'development' || nodeEnv === 'dev' || nodeEnv === 'test';
+
+  return Array.from(new Set([...(isLocalLikeEnv ? DEFAULT_ALLOWED_ORIGINS : []), ...fromEnv]));
 };
 
 async function bootstrap() {
+  const nodeEnv = readNodeEnv();
+  const isProductionLikeEnv = nodeEnv === 'production' || nodeEnv === 'staging';
+  const loggerLevels: LogLevel[] = isProductionLikeEnv
+    ? ['error', 'warn', 'log']
+    : ['log', 'error', 'warn', 'debug', 'verbose'];
+
   const app = await NestFactory.create(AppModule, {
-    logger: ['log', 'error', 'warn', 'debug', 'verbose'],
+    logger: loggerLevels,
   });
   const configService = app.get(ConfigService);
   const allowedOrigins = parseAllowedOrigins();
