@@ -6,6 +6,7 @@ import { UpdateResourceDto } from '../dto/update-resource.dto';
 import { Resource } from '../entities/resource.entity';
 import { User, UserRole } from '../../user/entities/user.entity';
 import { ForbiddenException } from '@nestjs/common';
+import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 
 describe('ResourceController', () => {
   let controller: ResourceController;
@@ -26,7 +27,10 @@ describe('ResourceController', () => {
           },
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<ResourceController>(ResourceController);
     service = module.get<ResourceService>(ResourceService) as jest.Mocked<ResourceService>;

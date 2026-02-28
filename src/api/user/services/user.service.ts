@@ -2,12 +2,9 @@ import { Injectable, UnauthorizedException, Logger, ConflictException, NotFoundE
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateUserDto } from '../dto/create-user.dto';
-import { LoginUserDto } from '../dto/login-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { User, UserRole } from '../entities/user.entity';
 import * as bcrypt from 'bcrypt';
-import { JwtService } from '@nestjs/jwt';
-import { AuthService } from '../../../shared/auth/services/auth.service';
 
 @Injectable()
 export class UserService {
@@ -16,8 +13,6 @@ export class UserService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-    private readonly jwtService: JwtService,
-    private readonly authService: AuthService,
   ) {}
 
   async register(createUserDto: CreateUserDto) {
@@ -34,19 +29,6 @@ export class UserService {
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = this.userRepository.create({ ...createUserDto, password: hashedPassword });
     return this.userRepository.save(user);
-  }
-
-  async login(loginUserDto: LoginUserDto) {
-    this.logger.log(`Logging in user from apartment: ${loginUserDto.apartment}, block: ${loginUserDto.block}`);
-    const user = await this.userRepository.findOne({ where: { apartment: loginUserDto.apartment, block: loginUserDto.block } });
-    if (!user || !(await bcrypt.compare(loginUserDto.password, user.password))) {
-      this.logger.warn(`Invalid credentials for apartment: ${loginUserDto.apartment}, block: ${loginUserDto.block}`);
-      throw new UnauthorizedException('Invalid credentials');
-    }
-    const payload = { name: user.name, sub: user.id, role: user.role };
-    const token = this.jwtService.sign(payload);
-    this.logger.log(`User logged in successfully: ${user.name}`);
-    return { message: 'User logged in successfully', token };
   }
 
   async getProfile(userId: string) {

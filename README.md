@@ -38,7 +38,8 @@ $ npm run test:cov
 
 ### Usuários
 - `POST /users/register`: Registra um novo usuário.
-- `POST /users/login`: Faz login de um usuário.
+- `POST /users/login`: **deprecated/disabled** (use `grillrentbff_v2`).
+- `POST /users/logout`: **deprecated/disabled** (use `grillrentbff_v2`).
 - `GET /users/profile`: Obtém o perfil do usuário autenticado.
 - `PUT /users/profile`: Atualiza o perfil do usuário autenticado.
 - `GET /users`: Obtém todos os usuários.
@@ -140,7 +141,7 @@ POST /bookings
 
 ## Autenticação e Autorização
 
-- **JWT**: A autenticação é gerenciada usando tokens JWT. Os usuários recebem um token JWT ao fazer login, que deve ser incluído no cabeçalho `Authorization` das requisições subsequentes.
+- **JWT**: A autenticação é gerenciada usando tokens JWT emitidos no BFF. O token deve ser incluído no cabeçalho `Authorization` das requisições subsequentes.
 - **Guards**: O `JwtAuthGuard` é usado para proteger rotas que requerem autenticação.
 
 ## Tratamento de Erros

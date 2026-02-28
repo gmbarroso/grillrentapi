@@ -2,18 +2,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UserService } from './user.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { User, UserRole } from '../entities/user.entity';
-import { JwtService } from '@nestjs/jwt';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { ConflictException, UnauthorizedException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { CreateUserDto } from '../dto/create-user.dto';
-import { LoginUserDto } from '../dto/login-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 
 describe('UserService', () => {
   let service: UserService;
   let repository: Repository<User>;
-  let jwtService: JwtService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -23,18 +20,11 @@ describe('UserService', () => {
           provide: getRepositoryToken(User),
           useClass: Repository,
         },
-        {
-          provide: JwtService,
-          useValue: {
-            sign: jest.fn().mockReturnValue('jwt-token'),
-          },
-        },
       ],
     }).compile();
 
     service = module.get<UserService>(UserService);
     repository = module.get<Repository<User>>(getRepositoryToken(User));
-    jwtService = module.get<JwtService>(JwtService);
   });
 
   it('should be defined', () => {
@@ -72,40 +62,6 @@ describe('UserService', () => {
       jest.spyOn(repository, 'findOne').mockResolvedValue(createUserDto as any);
 
       await expect(service.register(createUserDto)).rejects.toThrow(ConflictException);
-    });
-  });
-
-  describe('login', () => {
-    it('should login a user', async () => {
-      const loginUserDto: LoginUserDto = {
-        apartment: '101',
-        block: 1,
-        password: 'password123',
-      };
-      const user: User = {
-        id: '1',
-        name: 'testuser',
-        email: 'testuser@example.com',
-        password: 'hashedpassword',
-        apartment: '101',
-        block: 1,
-        role: UserRole.RESIDENT,
-      };
-      jest.spyOn(repository, 'findOne').mockResolvedValue(user as any);
-      jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
-
-      expect(await service.login(loginUserDto)).toEqual({ message: 'User logged in successfully', token: 'jwt-token' });
-    });
-
-    it('should throw an UnauthorizedException if credentials are invalid', async () => {
-      const loginUserDto: LoginUserDto = {
-        apartment: '101',
-        block: 1,
-        password: 'password123',
-      };
-      jest.spyOn(repository, 'findOne').mockResolvedValue(null);
-
-      await expect(service.login(loginUserDto)).rejects.toThrow(UnauthorizedException);
     });
   });
 

@@ -6,6 +6,7 @@ import { User, UserRole } from '../../../api/user/entities/user.entity';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { UnauthorizedException } from '@nestjs/common';
+import { RevokedToken } from '../entities/revoked-token.entity';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -25,6 +26,10 @@ describe('AuthService', () => {
           useValue: {
             sign: jest.fn().mockReturnValue('jwt-token'),
           },
+        },
+        {
+          provide: getRepositoryToken(RevokedToken),
+          useClass: Repository,
         },
       ],
     }).compile();
@@ -65,7 +70,7 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('should return access token if login is successful', async () => {
+    it('should return token aliases if login is successful', async () => {
       const user: User = {
         id: '1',
         name: 'testuser',
@@ -78,7 +83,7 @@ describe('AuthService', () => {
       jest.spyOn(service, 'validateUser').mockResolvedValue(user as any);
 
       const result = await service.login({ apartment: '101', block: 1, password: 'password123' }); // 8 characters
-      expect(result).toEqual({ access_token: 'jwt-token' });
+      expect(result).toEqual({ token: 'jwt-token', access_token: 'jwt-token' });
     });
 
     it('should throw UnauthorizedException if login fails', async () => {
