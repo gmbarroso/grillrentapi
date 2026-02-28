@@ -9,6 +9,7 @@ import { JwtStrategy } from '../../shared/auth/strategies/jwt.strategy';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { resolveJwtSecret } from '../../shared/auth/jwt-secret.policy';
 import { RevokedToken } from '../../shared/auth/entities/revoked-token.entity';
+import { JwtAuthGuard } from '../../shared/auth/guards/jwt-auth.guard';
 
 @Module({
   imports: [
@@ -28,7 +29,7 @@ import { RevokedToken } from '../../shared/auth/entities/revoked-token.entity';
     }),
   ],
   controllers: [UserController],
-  providers: [UserService, JwtStrategy],
-  exports: [UserService, TypeOrmModule],
+  providers: [UserService, JwtStrategy, JwtAuthGuard],
+  exports: [UserService, TypeOrmModule, JwtAuthGuard],
 })
 export class UserModule {}

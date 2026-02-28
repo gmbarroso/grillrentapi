@@ -12,7 +12,11 @@ const DEFAULT_ALLOWED_ORIGINS = [
 ];
 
 const parseAllowedOrigins = (): string[] => {
-  const rawOrigins = process.env.API_CORS_ALLOWED_ORIGINS || process.env.CORS_ALLOWED_ORIGINS || '';
+  const rawOrigins =
+    process.env.API_CORS_ALLOWED_ORIGINS ||
+    process.env.CORS_ALLOWED_ORIGINS ||
+    process.env.CORS_ORIGINS ||
+    '';
   const fromEnv = rawOrigins
     .split(',')
     .map((origin) => origin.trim())

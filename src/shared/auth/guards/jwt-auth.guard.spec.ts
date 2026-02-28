@@ -95,4 +95,18 @@ describe('API JwtAuthGuard', () => {
       'Invalid token payload',
     );
   });
+
+  it('maps err path to canonical auth error and records observability', () => {
+    expect(() => guard.handleRequest(new Error('jwt malformed'), null, null)).toThrow(
+      'Invalid or expired token',
+    );
+    expect(securityObservability.recordAuthFailure).toHaveBeenCalledWith('invalid_or_expired_token', 'passport');
+  });
+
+  it('maps invalid token payload from err path and records observability', () => {
+    expect(() => guard.handleRequest(new Error('Invalid token payload'), null, null)).toThrow(
+      'Invalid token payload',
+    );
+    expect(securityObservability.recordAuthFailure).toHaveBeenCalledWith('invalid_token_payload', 'passport');
+  });
 });

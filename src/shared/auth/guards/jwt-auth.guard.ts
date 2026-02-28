@@ -62,13 +62,20 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 
   handleRequest(err, user, info) {
+    const infoMessage = info?.message;
+
     if (err) {
-      this.logger.warn(`Unauthorized request: ${err.message}`);
-      throw err;
+      const errorMessage = err.message || infoMessage || 'unknown reason';
+      this.logger.warn(`Unauthorized request: ${errorMessage}`);
+      if (errorMessage === 'Invalid token payload') {
+        this.securityObservability.recordAuthFailure('invalid_token_payload', 'passport');
+        throw new UnauthorizedException('Invalid token payload');
+      }
+      this.securityObservability.recordAuthFailure('invalid_or_expired_token', 'passport');
+      throw new UnauthorizedException('Invalid or expired token');
     }
 
     if (!user) {
-      const infoMessage = info?.message;
       this.logger.warn(`Unauthorized request: ${infoMessage || 'unknown reason'}`);
       if (infoMessage === 'Invalid token payload') {
         this.securityObservability.recordAuthFailure('invalid_token_payload', 'passport');
