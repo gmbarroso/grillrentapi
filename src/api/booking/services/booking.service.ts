@@ -7,7 +7,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual, MoreThanOrEqual, FindManyOptions } from 'typeorm';
+import { Repository, FindManyOptions } from 'typeorm';
 import { CreateBookingDto } from '../dto/create-booking.dto';
 import { ResourceService } from '../../resource/services/resource.service';
 import { Booking } from '../entities/booking.entity';
@@ -17,6 +17,7 @@ import { Resource } from '../../resource/entities/resource.entity';
 @Injectable()
 export class BookingService {
   private readonly logger = new Logger(BookingService.name);
+  private static readonly SAO_PAULO_UTC_OFFSET_HOURS = 3;
 
   constructor(
     @InjectRepository(Booking)
@@ -392,17 +393,15 @@ export class BookingService {
       throw new BadRequestException('Date parameter is required for non-grill resources');
     }
 
-    const startOfDay = new Date(`${date}T00:00:00Z`);
-    const endOfDay = new Date(`${date}T23:59:59Z`);
+    const [startOfLocalDayUtc, endOfLocalDayUtcExclusive] = this.getSaoPauloUtcDayRange(date);
 
-    const bookings = await this.bookingRepository.find({
-      where: {
-        resource: { type: resourceType },
-        startTime: MoreThanOrEqual(startOfDay),
-        endTime: LessThanOrEqual(endOfDay),
-      },
-      relations: ['resource'],
-    });
+    const bookings = await this.bookingRepository
+      .createQueryBuilder('booking')
+      .leftJoinAndSelect('booking.resource', 'resource')
+      .where('resource.type = :resourceType', { resourceType })
+      .andWhere('booking.startTime < :endOfLocalDayUtcExclusive', { endOfLocalDayUtcExclusive })
+      .andWhere('booking.endTime > :startOfLocalDayUtc', { startOfLocalDayUtc })
+      .getMany();
 
     const reservedTimes = bookings.map(booking => ({
       startTime: booking.startTime,
@@ -410,6 +409,25 @@ export class BookingService {
     }));
 
     return { reservedTimes };
+  }
+
+  private getSaoPauloUtcDayRange(date: string): [Date, Date] {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      this.logger.warn(`Invalid date format for reserved-times: ${date}`);
+      throw new BadRequestException('Invalid date format. Expected YYYY-MM-DD');
+    }
+
+    const startOfLocalDayUtc = new Date(`${date}T00:00:00.000Z`);
+    if (Number.isNaN(startOfLocalDayUtc.getTime())) {
+      this.logger.warn(`Invalid date value for reserved-times: ${date}`);
+      throw new BadRequestException('Invalid date value');
+    }
+
+    startOfLocalDayUtc.setUTCHours(startOfLocalDayUtc.getUTCHours() + BookingService.SAO_PAULO_UTC_OFFSET_HOURS);
+    const endOfLocalDayUtcExclusive = new Date(startOfLocalDayUtc);
+    endOfLocalDayUtcExclusive.setUTCDate(endOfLocalDayUtcExclusive.getUTCDate() + 1);
+
+    return [startOfLocalDayUtc, endOfLocalDayUtcExclusive];
   }
 
   private validateTimeRange(startTime: Date, endTime: Date, action: string) {

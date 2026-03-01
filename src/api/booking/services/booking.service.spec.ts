@@ -84,10 +84,11 @@ describe('BookingService', () => {
     });
 
     it('throws when startTime is today or in the past', async () => {
+      const now = new Date();
       const dto: CreateBookingDto = {
         ...createBookingDto,
-        startTime: new Date(Date.now() + 3_600_000),
-        endTime: new Date(Date.now() + 7_200_000),
+        startTime: now,
+        endTime: new Date(now.getTime() + 3_600_000),
       };
       jest.spyOn(resourceService, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'grill' } as Resource);
 
@@ -413,6 +414,51 @@ describe('BookingService', () => {
       );
 
       expect(booking.user.id).toBe('owner-1');
+    });
+  });
+
+  describe('getReservedTimes', () => {
+    it('queries tennis reservations using Sao Paulo local day overlap window', async () => {
+      jest.spyOn(resourceRepository, 'find').mockResolvedValue([{ id: 'resource-1', type: 'tennis' } as Resource]);
+
+      const bookings = [
+        {
+          id: 'booking-1',
+          startTime: new Date('2026-03-03T22:00:00.000Z'),
+          endTime: new Date('2026-03-03T23:00:00.000Z'),
+        },
+      ] as Booking[];
+
+      const queryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(bookings),
+      };
+      bookingRepository.createQueryBuilder = jest.fn().mockReturnValue(queryBuilder as any);
+
+      const result = await service.getReservedTimes('tennis', '2026-03-03');
+
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith('booking.startTime < :endOfLocalDayUtcExclusive', {
+        endOfLocalDayUtcExclusive: new Date('2026-03-04T03:00:00.000Z'),
+      });
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith('booking.endTime > :startOfLocalDayUtc', {
+        startOfLocalDayUtc: new Date('2026-03-03T03:00:00.000Z'),
+      });
+      expect(result).toEqual({
+        reservedTimes: [
+          {
+            startTime: new Date('2026-03-03T22:00:00.000Z'),
+            endTime: new Date('2026-03-03T23:00:00.000Z'),
+          },
+        ],
+      });
+    });
+
+    it('throws when date format is invalid for non-grill resources', async () => {
+      jest.spyOn(resourceRepository, 'find').mockResolvedValue([{ id: 'resource-1', type: 'tennis' } as Resource]);
+
+      await expect(service.getReservedTimes('tennis', '03/03/2026')).rejects.toThrow(BadRequestException);
     });
   });
 });
