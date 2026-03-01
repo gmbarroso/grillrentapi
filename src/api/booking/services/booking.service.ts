@@ -82,7 +82,7 @@ export class BookingService {
     this.logger.log(`Booking created successfully: ${booking.id}`);
     this.logger.log(`Booking created successfully: ${booking.id}, user: ${user.id}, resource: ${resource.id}, start time: ${startTime}, end time: ${endTime}, needTablesAndChairs: ${needTablesAndChairs}`);
 
-    return { message: 'Booking created successfully', booking };
+    return { message: 'Booking created successfully', booking: this.serializeBookingTimestampFields(booking) };
   }
 
   async update(bookingId: string, updateBookingDto: Partial<CreateBookingDto>, userId: string, userRole: string) {
@@ -145,7 +145,7 @@ export class BookingService {
 
     await this.bookingRepository.save(booking);
     this.logger.log(`Booking updated successfully: ${booking.id}`);
-    return { message: 'Booking updated successfully', booking };
+    return { message: 'Booking updated successfully', booking: this.serializeBookingTimestampFields(booking) };
   }
 
   async checkAvailability(
@@ -257,8 +257,8 @@ export class BookingService {
         resourceId: booking.resource.id,
         resourceName: booking.resource.name,
         resourceType: booking.resource.type,
-        startTime: booking.startTime,
-        endTime: booking.endTime,
+        startTime: this.toUtcIsoString(booking.startTime),
+        endTime: this.toUtcIsoString(booking.endTime),
         userId: booking.user.id,
         userApartment: booking.user.apartment,
         userBlock: booking.user.block,
@@ -324,8 +324,8 @@ export class BookingService {
         resourceId: booking.resource.id,
         resourceName: booking.resource.name,
         resourceType: booking.resource.type,
-        startTime: booking.startTime,
-        endTime: booking.endTime,
+        startTime: this.toUtcIsoString(booking.startTime),
+        endTime: this.toUtcIsoString(booking.endTime),
         userId: booking.user.id,
         userApartment: booking.user.apartment,
         userBlock: booking.user.block,
@@ -400,8 +400,8 @@ export class BookingService {
       .getMany();
 
     const reservedTimes = bookings.map(booking => ({
-      startTime: booking.startTime,
-      endTime: booking.endTime,
+      startTime: this.toUtcIsoString(booking.startTime),
+      endTime: this.toUtcIsoString(booking.endTime),
     }));
 
     return { reservedTimes };
@@ -448,6 +448,24 @@ export class BookingService {
     endOfLocalDayUtcExclusive.setUTCDate(endOfLocalDayUtcExclusive.getUTCDate() + 1);
 
     return [localDayStartProxyUtc, endOfLocalDayUtcExclusive];
+  }
+
+  private toUtcIsoString(value: Date | string): string {
+    const dateValue = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(dateValue.getTime())) {
+      this.logger.warn(`Invalid booking timestamp found during serialization: ${value}`);
+      throw new BadRequestException('Invalid booking timestamp');
+    }
+
+    return dateValue.toISOString();
+  }
+
+  private serializeBookingTimestampFields<T extends { startTime: Date | string; endTime: Date | string }>(booking: T) {
+    return {
+      ...booking,
+      startTime: this.toUtcIsoString(booking.startTime),
+      endTime: this.toUtcIsoString(booking.endTime),
+    };
   }
 
   private validateTimeRange(startTime: Date, endTime: Date, action: string) {
