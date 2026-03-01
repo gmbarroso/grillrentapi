@@ -9,6 +9,8 @@ import * as bcrypt from 'bcrypt';
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
+  private readonly defaultOrganizationId
+    = process.env.DEFAULT_ORGANIZATION_ID || '9dd02335-74fa-487b-99f3-f3e6f9fba2af';
 
   constructor(
     @InjectRepository(User)
@@ -17,17 +19,18 @@ export class UserService {
 
   async register(createUserDto: CreateUserDto) {
     const { name, email, apartment, block, password, role } = createUserDto;
+    const organizationId = this.defaultOrganizationId;
 
     const existingUser = await this.userRepository.findOne({
-      where: [{ name }, { email }, { apartment, block }],
+      where: [{ email, organizationId }, { apartment, block, organizationId }],
     });
 
     if (existingUser) {
-      throw new ConflictException('Name, email, apartment or block already in use');
+      throw new ConflictException('Email, apartment or block already in use for this organization');
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = this.userRepository.create({ ...createUserDto, password: hashedPassword });
+    const user = this.userRepository.create({ name, email, apartment, block, role, password: hashedPassword, organizationId });
     return this.userRepository.save(user);
   }
 

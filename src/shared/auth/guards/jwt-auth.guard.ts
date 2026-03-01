@@ -51,12 +51,14 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 
     const rawOrganizationHeader = request.headers['x-organization-id'];
     const organizationId = Array.isArray(rawOrganizationHeader) ? rawOrganizationHeader[0] : rawOrganizationHeader;
-    const isValidOrganizationId = typeof organizationId === 'string'
-      && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(organizationId);
+    const normalizedOrganizationId = typeof organizationId === 'string' ? organizationId.trim().toLowerCase() : organizationId;
+    const isValidOrganizationId = typeof normalizedOrganizationId === 'string'
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalizedOrganizationId);
     if (!organizationId || !isValidOrganizationId) {
       this.securityObservability.recordAuthFailure('invalid_token_payload', request.url);
       throw new UnauthorizedException('Invalid organization context');
     }
+    request.headers['x-organization-id'] = normalizedOrganizationId;
 
     const token = request.headers.authorization?.split(' ')[1];
     if (!token) {
@@ -80,6 +82,9 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const request = context?.switchToHttp?.().getRequest?.();
     const rawOrganizationHeader = request?.headers?.['x-organization-id'];
     const organizationHeader = Array.isArray(rawOrganizationHeader) ? rawOrganizationHeader[0] : rawOrganizationHeader;
+    const normalizedOrganizationHeader = typeof organizationHeader === 'string'
+      ? organizationHeader.trim().toLowerCase()
+      : organizationHeader;
 
     if (err) {
       const errorMessage = err.message || infoMessage || 'unknown reason';
@@ -101,7 +106,10 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       this.securityObservability.recordAuthFailure('invalid_or_expired_token', 'passport');
       throw new UnauthorizedException('Invalid or expired token');
     }
-    if (organizationHeader !== user.organizationId) {
+    const normalizedUserOrganizationId = typeof user.organizationId === 'string'
+      ? user.organizationId.trim().toLowerCase()
+      : user.organizationId;
+    if (normalizedOrganizationHeader !== normalizedUserOrganizationId) {
       this.securityObservability.recordAuthFailure('invalid_token_payload', request?.url || 'passport');
       throw new ForbiddenException('Organization context mismatch');
     }

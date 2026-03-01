@@ -385,7 +385,7 @@ export class BookingService {
   
     if (user.role !== UserRole.ADMIN && booking.user.id !== userId) {
       this.logger.warn(`User ID: ${userId} is not authorized to remove booking ID: ${bookingId}`);
-      throw new BadRequestException('You are not authorized to remove this booking');
+      throw new ForbiddenException('You are not authorized to remove this booking');
     }
   
     await this.bookingRepository.remove(booking);

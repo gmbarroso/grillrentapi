@@ -41,7 +41,7 @@ describe('UserService', () => {
         block: 1,
         role: UserRole.RESIDENT,
       };
-      const user: User = { id: '1', ...createUserDto };
+      const user: User = { id: '1', organizationId: '9dd02335-74fa-487b-99f3-f3e6f9fba2af', ...createUserDto };
       jest.spyOn(repository, 'findOne').mockResolvedValue(null);
       jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashedpassword' as never);
       jest.spyOn(repository, 'create').mockReturnValue(user as any);
@@ -78,13 +78,13 @@ describe('UserService', () => {
       };
       jest.spyOn(repository, 'findOne').mockResolvedValue(user as any);
 
-      expect(await service.getProfile('1')).toEqual({ message: 'User profile retrieved successfully', user });
+      expect(await service.getProfile('1', '9dd02335-74fa-487b-99f3-f3e6f9fba2af')).toEqual({ message: 'User profile retrieved successfully', user });
     });
 
     it('should throw an UnauthorizedException if user is not found', async () => {
       jest.spyOn(repository, 'findOne').mockResolvedValue(null);
 
-      await expect(service.getProfile('1')).rejects.toThrow(UnauthorizedException);
+      await expect(service.getProfile('1', '9dd02335-74fa-487b-99f3-f3e6f9fba2af')).rejects.toThrow(UnauthorizedException);
     });
   });
 
@@ -102,6 +102,7 @@ describe('UserService', () => {
         apartment: '101',
         block: 1,
         role: UserRole.RESIDENT,
+        organizationId: '9dd02335-74fa-487b-99f3-f3e6f9fba2af',
       };
       const updatedUser = { ...user, ...updateUserDto };
       jest.spyOn(repository, 'findOne').mockResolvedValue(user as any);
@@ -123,6 +124,7 @@ describe('UserService', () => {
         apartment: '101',
         block: 1,
         role: UserRole.RESIDENT,
+        organizationId: '9dd02335-74fa-487b-99f3-f3e6f9fba2af',
       };
       jest.spyOn(repository, 'findOne').mockResolvedValue(null);
 
@@ -142,6 +144,7 @@ describe('UserService', () => {
         apartment: '101',
         block: 1,
         role: UserRole.RESIDENT,
+        organizationId: '9dd02335-74fa-487b-99f3-f3e6f9fba2af',
       };
       jest.spyOn(repository, 'findOne').mockResolvedValue(user as any);
 
@@ -162,7 +165,7 @@ describe('UserService', () => {
       }];
       jest.spyOn(repository, 'find').mockResolvedValue(users as any);
 
-      expect(await service.getAllUsers()).toEqual({ message: 'All users retrieved successfully', users });
+      expect(await service.getAllUsers('9dd02335-74fa-487b-99f3-f3e6f9fba2af')).toEqual({ message: 'All users retrieved successfully', users });
     });
   });
 
@@ -180,13 +183,13 @@ describe('UserService', () => {
       jest.spyOn(repository, 'findOne').mockResolvedValue(user as any);
       jest.spyOn(repository, 'remove').mockResolvedValue(user as any);
 
-      expect(await service.remove('1')).toEqual({ message: 'User removed successfully' });
+      expect(await service.remove('1', '9dd02335-74fa-487b-99f3-f3e6f9fba2af')).toEqual({ message: 'User removed successfully' });
     });
 
     it('should throw a NotFoundException if user is not found', async () => {
       jest.spyOn(repository, 'findOne').mockResolvedValue(null);
 
-      await expect(service.remove('1')).rejects.toThrow(NotFoundException);
-    });
+      await expect(service.remove('1', '9dd02335-74fa-487b-99f3-f3e6f9fba2af')).rejects.toThrow(NotFoundException);
   });
+});
 });

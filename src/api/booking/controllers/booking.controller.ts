@@ -1,9 +1,9 @@
-import { Controller, Post, Body, Logger, Get, Param, Delete, UseGuards, Req, Query, Put, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Body, Logger, Get, Param, Delete, UseGuards, Req, Query, Put, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { BookingService } from '../services/booking.service';
 import { CreateBookingDto } from '../dto/create-booking.dto';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { Request } from 'express';
-import { User } from '../../user/entities/user.entity';
+import { User, UserRole } from '../../user/entities/user.entity';
 
 interface AuthenticatedRequest extends Request {
   user: User;
@@ -49,6 +49,11 @@ export class BookingController {
     @Query('sort') sort: string = 'startTime',
     @Query('order') order: 'ASC' | 'DESC' = 'ASC',
   ) {
+    const requesterId = req.user.id.toString();
+    const isAdmin = req.user.role === UserRole.ADMIN;
+    if (!isAdmin && requesterId !== userId) {
+      throw new ForbiddenException('You do not have permission to view bookings for this user');
+    }
     this.logger.log(`Fetching bookings for user ID: ${userId}`);
     return this.bookingService.findByUser(userId, this.requireOrganizationId(req), page, limit, sort, order);
   }

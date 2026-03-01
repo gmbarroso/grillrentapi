@@ -79,22 +79,8 @@ export class AddOrganizationMultitenancyFoundation1762100000000 implements Migra
     await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_notice_organizationId" ON "notice" ("organizationId")`);
     await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_revoked_token_organizationId" ON "revoked_token" ("organizationId")`);
 
-    await queryRunner.query(`
-      DO $$
-      DECLARE c record;
-      BEGIN
-        FOR c IN
-          SELECT conname
-          FROM pg_constraint
-          WHERE conrelid = '"user"'::regclass
-            AND contype = 'u'
-            AND conname <> 'UQ_user_organization_email'
-            AND conname <> 'UQ_user_organization_apartment_block'
-        LOOP
-          EXECUTE format('ALTER TABLE "user" DROP CONSTRAINT %I', c.conname);
-        END LOOP;
-      END $$;
-    `);
+    await queryRunner.query(`ALTER TABLE "user" DROP CONSTRAINT IF EXISTS "UQ_user_email"`);
+    await queryRunner.query(`ALTER TABLE "user" DROP CONSTRAINT IF EXISTS "UQ_user_apartment_block"`);
 
     await queryRunner.query(`
       DO $$
