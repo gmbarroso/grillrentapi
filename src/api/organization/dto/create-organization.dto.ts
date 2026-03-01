@@ -14,7 +14,7 @@ export class CreateOrganizationDto {
 
 export const CreateOrganizationSchema = Joi.object({
   name: Joi.string().trim().min(2).max(120).required(),
-  slug: Joi.string().trim().lowercase().pattern(/^[a-z0-9-]+$/).optional(),
+  slug: Joi.string().trim().min(1).max(120).optional(),
   address: Joi.string().max(1000).allow('', null).optional(),
   email: Joi.string().email().allow('', null).optional(),
   phone: Joi.string().max(40).allow('', null).optional(),

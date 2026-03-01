@@ -10,6 +10,7 @@ import { Resource } from '../../resource/entities/resource.entity';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 
 describe('BookingService', () => {
+  const ORG_ID = '9dd02335-74fa-487b-99f3-f3e6f9fba2af';
   let service: BookingService;
   let bookingRepository: jest.Mocked<Repository<Booking>>;
   let resourceRepository: jest.Mocked<Repository<Resource>>;
@@ -71,6 +72,7 @@ describe('BookingService', () => {
         { ...createBookingDto, bookedOnBehalf: 'Family Event' },
         'user-1',
         UserRole.ADMIN,
+        ORG_ID,
       );
 
       expect(result.message).toBe('Booking created successfully');
@@ -98,7 +100,7 @@ describe('BookingService', () => {
       };
       jest.spyOn(resourceService, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'grill' } as Resource);
 
-      await expect(service.create(dto, 'user-1', UserRole.RESIDENT)).rejects.toThrow(BadRequestException);
+      await expect(service.create(dto, 'user-1', UserRole.RESIDENT, ORG_ID)).rejects.toThrow(BadRequestException);
     });
 
     it('allows same-day future booking for tennis', async () => {
@@ -122,7 +124,7 @@ describe('BookingService', () => {
       jest.spyOn(bookingRepository, 'create').mockReturnValue(createdBooking);
       jest.spyOn(bookingRepository, 'save').mockResolvedValue(createdBooking);
 
-      const result = await service.create(dto, 'user-1', UserRole.RESIDENT);
+      const result = await service.create(dto, 'user-1', UserRole.RESIDENT, ORG_ID);
       expect(result).toMatchObject({
         message: 'Booking created successfully',
         booking: {
@@ -142,21 +144,21 @@ describe('BookingService', () => {
         endTime: new Date('2026-06-10T14:00:00.000Z'),
       };
 
-      await expect(service.create(dto, 'user-1', UserRole.RESIDENT)).rejects.toThrow(BadRequestException);
+      await expect(service.create(dto, 'user-1', UserRole.RESIDENT, ORG_ID)).rejects.toThrow(BadRequestException);
     });
 
     it('throws when resource is not available', async () => {
       jest.spyOn(service, 'checkAvailability').mockResolvedValue({ available: false, message: 'Not available' });
       jest.spyOn(resourceService, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hall' } as Resource);
 
-      await expect(service.create(createBookingDto, 'user-1', UserRole.RESIDENT)).rejects.toThrow(
+      await expect(service.create(createBookingDto, 'user-1', UserRole.RESIDENT, ORG_ID)).rejects.toThrow(
         BadRequestException,
       );
     });
 
     it('throws ForbiddenException when non-admin sets bookedOnBehalf', async () => {
       await expect(
-        service.create({ ...createBookingDto, bookedOnBehalf: 'Family Event' }, 'user-1', UserRole.RESIDENT),
+        service.create({ ...createBookingDto, bookedOnBehalf: 'Family Event' }, 'user-1', UserRole.RESIDENT, ORG_ID),
       ).rejects.toThrow(ForbiddenException);
     });
   });
@@ -179,6 +181,7 @@ describe('BookingService', () => {
 
       const queryBuilder = {
         leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
         take: jest.fn().mockReturnThis(),
         skip: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
@@ -188,7 +191,7 @@ describe('BookingService', () => {
 
       bookingRepository.createQueryBuilder = jest.fn().mockReturnValue(queryBuilder as any);
 
-      const result = await service.findAll(1, 10, 'startTime', 'ASC', '2026-06-10', '2026-06-11');
+      const result = await service.findAll(ORG_ID, 1, 10, 'startTime', 'ASC', '2026-06-10', '2026-06-11');
 
       expect(queryBuilder.andWhere).toHaveBeenCalledWith('booking.startTime >= :startDate', {
         startDate: new Date('2026-06-10T00:00:00.000Z'),
@@ -235,7 +238,7 @@ describe('BookingService', () => {
 
       jest.spyOn(bookingRepository, 'findAndCount').mockResolvedValue([bookings as Booking[], 1]);
 
-      const result = await service.findByUser('user-1', 1, 10, 'startTime', 'ASC');
+      const result = await service.findByUser('user-1', ORG_ID, 1, 10, 'startTime', 'ASC');
 
       expect(result).toEqual({
         data: [
@@ -275,7 +278,7 @@ describe('BookingService', () => {
 
       jest.spyOn(bookingRepository, 'findAndCount').mockResolvedValue([bookings as Booking[], 1]);
 
-      const result = await service.findByUser('user-1', 1, 10, 'startTime', 'ASC');
+      const result = await service.findByUser('user-1', ORG_ID, 1, 10, 'startTime', 'ASC');
       expect(result.data[0].startTime).toBe('2026-06-10T11:00:00.000Z');
     });
   });
@@ -286,7 +289,7 @@ describe('BookingService', () => {
       jest.spyOn(userRepository, 'findOne').mockResolvedValue({ id: 'user-1', role: UserRole.RESIDENT } as User);
       jest.spyOn(bookingRepository, 'remove').mockResolvedValue({ id: 'booking-1' } as Booking);
 
-      await expect(service.remove('booking-1', 'user-1')).resolves.toEqual({
+      await expect(service.remove('booking-1', 'user-1', ORG_ID)).resolves.toEqual({
         message: 'Booking removed successfully',
       });
     });
@@ -294,7 +297,7 @@ describe('BookingService', () => {
     it('throws NotFound when booking does not exist', async () => {
       jest.spyOn(bookingRepository, 'findOne').mockResolvedValue(null);
 
-      await expect(service.remove('missing-booking', 'user-1')).rejects.toThrow(NotFoundException);
+      await expect(service.remove('missing-booking', 'user-1', ORG_ID)).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -303,7 +306,12 @@ describe('BookingService', () => {
       jest.spyOn(resourceRepository, 'findOne').mockResolvedValue(null);
 
       await expect(
-        service.checkAvailability('resource-1', new Date('2026-06-10T12:00:00.000Z'), new Date('2026-06-10T15:00:00.000Z')),
+        service.checkAvailability(
+          'resource-1',
+          new Date('2026-06-10T12:00:00.000Z'),
+          new Date('2026-06-10T15:00:00.000Z'),
+          { organizationId: ORG_ID },
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -321,6 +329,7 @@ describe('BookingService', () => {
         'resource-1',
         new Date('2026-06-10T12:00:00.000Z'),
         new Date('2026-06-10T15:00:00.000Z'),
+        { organizationId: ORG_ID },
       );
 
       expect(result.available).toBe(false);
@@ -349,7 +358,7 @@ describe('BookingService', () => {
         'resource-1',
         new Date('2026-06-10T10:00:00.000Z'),
         new Date('2026-06-10T11:00:00.000Z'),
-        { userId: 'user-1' },
+        { userId: 'user-1', organizationId: ORG_ID },
       );
 
       expect(queryBuilder.andWhere).toHaveBeenCalledWith('booking.startTime < :endOfLocalDayUtcExclusive', {
@@ -385,7 +394,7 @@ describe('BookingService', () => {
         'resource-1',
         new Date('2026-06-10T10:00:00.000Z'),
         new Date('2026-06-10T11:30:00.000Z'),
-        { userId: 'user-1' },
+        { userId: 'user-1', organizationId: ORG_ID },
       );
 
       expect(result.available).toBe(false);
@@ -408,7 +417,7 @@ describe('BookingService', () => {
         'resource-1',
         new Date('2026-03-03T22:00:00.000Z'),
         new Date('2026-03-03T23:00:00.000Z'),
-        { userId: 'user-1' },
+        { userId: 'user-1', organizationId: ORG_ID },
       );
 
       expect(result.available).toBe(true);
@@ -422,7 +431,7 @@ describe('BookingService', () => {
           'resource-1',
           new Date('2026-03-04T02:30:00.000Z'),
           new Date('2026-03-04T03:30:00.000Z'),
-          { userId: 'user-1' },
+          { userId: 'user-1', organizationId: ORG_ID },
         ),
       ).rejects.toThrow(BadRequestException);
     });
@@ -435,7 +444,7 @@ describe('BookingService', () => {
           'resource-1',
           new Date('invalid-date'),
           new Date('2026-03-03T23:00:00.000Z'),
-          { userId: 'user-1' },
+          { userId: 'user-1', organizationId: ORG_ID },
         ),
       ).rejects.toThrow(BadRequestException);
     });
@@ -457,6 +466,7 @@ describe('BookingService', () => {
           { startTime: new Date('2026-06-11T10:00:00.000Z') },
           'other-user',
           UserRole.RESIDENT,
+          ORG_ID,
         ),
       ).rejects.toThrow(ForbiddenException);
     });
@@ -479,6 +489,7 @@ describe('BookingService', () => {
           },
           'owner-1',
           UserRole.RESIDENT,
+          ORG_ID,
         ),
       ).rejects.toThrow(BadRequestException);
     });
@@ -506,6 +517,7 @@ describe('BookingService', () => {
         } as Partial<CreateBookingDto>,
         'owner-1',
         UserRole.RESIDENT,
+        ORG_ID,
       );
 
       expect(booking.user.id).toBe('owner-1');
@@ -526,6 +538,7 @@ describe('BookingService', () => {
           { bookedOnBehalf: 'Family Event' },
           'owner-1',
           UserRole.RESIDENT,
+          ORG_ID,
         ),
       ).rejects.toThrow(ForbiddenException);
     });
@@ -553,6 +566,7 @@ describe('BookingService', () => {
         },
         'owner-1',
         UserRole.RESIDENT,
+        ORG_ID,
       );
 
       expect(result.booking.startTime).toBe('2026-06-11T10:00:00.000Z');
@@ -580,7 +594,7 @@ describe('BookingService', () => {
       };
       bookingRepository.createQueryBuilder = jest.fn().mockReturnValue(queryBuilder as any);
 
-      const result = await service.getReservedTimes('tennis', '2026-03-03');
+      const result = await service.getReservedTimes(ORG_ID, 'tennis', '2026-03-03');
 
       expect(queryBuilder.andWhere).toHaveBeenCalledWith('booking.startTime < :endOfLocalDayUtcExclusive', {
         endOfLocalDayUtcExclusive: new Date('2026-03-04T03:00:00.000Z'),
@@ -601,7 +615,7 @@ describe('BookingService', () => {
     it('throws when date format is invalid for non-grill resources', async () => {
       jest.spyOn(resourceRepository, 'find').mockResolvedValue([{ id: 'resource-1', type: 'tennis' } as Resource]);
 
-      await expect(service.getReservedTimes('tennis', '03/03/2026')).rejects.toThrow(BadRequestException);
-    });
+      await expect(service.getReservedTimes(ORG_ID, 'tennis', '03/03/2026')).rejects.toThrow(BadRequestException);
   });
+});
 });

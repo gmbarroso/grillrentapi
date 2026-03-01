@@ -163,13 +163,9 @@ export class BookingService {
     resourceId: string,
     startTime: Date,
     endTime: Date,
-    options?: { userId?: string; organizationId?: string; excludeBookingId?: string },
+    options: { organizationId: string; userId?: string; excludeBookingId?: string },
   ) {
     this.logger.log(`Checking for existing bookings for resource ID: ${resourceId} from ${startTime} to ${endTime}`);
-    
-    if (!options?.organizationId) {
-      throw new BadRequestException('Organization context is required');
-    }
 
     const resource = await this.resourceRepository.findOne({
       where: { id: resourceId, organizationId: options.organizationId },
