@@ -246,5 +246,55 @@ describe('BookingService', () => {
       expect(result.available).toBe(false);
       expect(result.message).toContain('already booked by apartment 101');
     });
+
+    it('enforces tennis daily cap of 2 hours per user', async () => {
+      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+      jest.spyOn(bookingRepository, 'find').mockResolvedValue([]);
+
+      const queryBuilder = {
+        leftJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          {
+            id: 'booking-1',
+            startTime: new Date('2026-06-10T08:00:00.000Z'),
+            endTime: new Date('2026-06-10T10:00:00.000Z'),
+          },
+        ]),
+      };
+      bookingRepository.createQueryBuilder = jest.fn().mockReturnValue(queryBuilder as any);
+
+      const result = await service.checkAvailability(
+        'resource-1',
+        new Date('2026-06-10T10:00:00.000Z'),
+        new Date('2026-06-10T11:00:00.000Z'),
+        { userId: 'user-1' },
+      );
+
+      expect(result.available).toBe(false);
+      expect(result.message).toContain('more than 2 total tennis hours');
+    });
+  });
+
+  describe('update', () => {
+    it('blocks update when requester is not owner or admin', async () => {
+      jest.spyOn(bookingRepository, 'findOne').mockResolvedValue({
+        id: 'booking-1',
+        user: { id: 'owner-1' },
+        resource: { id: 'resource-1' },
+        startTime: new Date('2026-06-10T10:00:00.000Z'),
+        endTime: new Date('2026-06-10T11:00:00.000Z'),
+      } as unknown as Booking);
+
+      await expect(
+        service.update(
+          'booking-1',
+          { startTime: new Date('2026-06-11T10:00:00.000Z') },
+          'other-user',
+          UserRole.RESIDENT,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 });
