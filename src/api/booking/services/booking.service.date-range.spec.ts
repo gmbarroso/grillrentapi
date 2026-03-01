@@ -35,10 +35,10 @@ describe('BookingService date-range filtering', () => {
     await service.findAll(1, 20, 'startTime', 'ASC', '2026-02-27', '2026-05-27');
 
     expect(queryBuilder.andWhere).toHaveBeenCalledWith('booking.startTime >= :startDate', {
-      startDate: '2026-02-27T00:00:00.000Z',
+      startDate: new Date('2026-02-27T00:00:00.000Z'),
     });
     expect(queryBuilder.andWhere).toHaveBeenCalledWith('booking.startTime <= :endDate', {
-      endDate: '2026-05-27T23:59:59.999Z',
+      endDate: new Date('2026-05-27T23:59:59.999Z'),
     });
   });
 

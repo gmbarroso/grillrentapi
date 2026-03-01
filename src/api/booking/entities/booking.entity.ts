@@ -10,10 +10,10 @@ export class Booking {
   @Column()
   resourceId!: string;
 
-  @Column()
+  @Column({ type: 'timestamptz' })
   startTime!: Date;
 
-  @Column()
+  @Column({ type: 'timestamptz' })
   endTime!: Date;
 
   @Column()

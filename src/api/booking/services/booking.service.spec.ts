@@ -74,7 +74,13 @@ describe('BookingService', () => {
       );
 
       expect(result.message).toBe('Booking created successfully');
-      expect(result.booking).toEqual(createdBooking);
+      expect(result.booking).toMatchObject({
+        id: 'booking-1',
+        startTime: '2026-06-10T12:00:00.000Z',
+        endTime: '2026-06-10T15:00:00.000Z',
+      });
+      expect(result.booking.startTime).toMatch(/Z$/);
+      expect(result.booking.endTime).toMatch(/Z$/);
       expect(bookingRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           bookedOnBehalf: 'Family Event',
@@ -106,6 +112,8 @@ describe('BookingService', () => {
         id: 'booking-1',
         user: { id: 'user-1' },
         resource: { id: 'resource-1' },
+        startTime: dto.startTime,
+        endTime: dto.endTime,
       } as unknown as Booking;
 
       jest.spyOn(service, 'checkAvailability').mockResolvedValue({ available: true, message: 'Available' });
@@ -114,9 +122,16 @@ describe('BookingService', () => {
       jest.spyOn(bookingRepository, 'create').mockReturnValue(createdBooking);
       jest.spyOn(bookingRepository, 'save').mockResolvedValue(createdBooking);
 
-      await expect(service.create(dto, 'user-1', UserRole.RESIDENT)).resolves.toEqual({
+      const result = await service.create(dto, 'user-1', UserRole.RESIDENT);
+      expect(result).toMatchObject({
         message: 'Booking created successfully',
-        booking: createdBooking,
+        booking: {
+          id: 'booking-1',
+          user: { id: 'user-1' },
+          resource: { id: 'resource-1' },
+          startTime: dto.startTime.toISOString(),
+          endTime: dto.endTime.toISOString(),
+        },
       });
     });
 
@@ -147,7 +162,7 @@ describe('BookingService', () => {
   });
 
   describe('findAll', () => {
-    it('applies date range filters and maps paginated response', async () => {
+    it('applies date range filters and maps paginated response as ISO UTC', async () => {
       const bookings: Booking[] = [
         {
           id: 'booking-1',
@@ -188,8 +203,8 @@ describe('BookingService', () => {
             resourceId: 'resource-1',
             resourceName: 'Party Hall',
             resourceType: 'hall',
-            startTime: new Date('2026-06-10T12:00:00.000Z'),
-            endTime: new Date('2026-06-10T15:00:00.000Z'),
+            startTime: '2026-06-10T12:00:00.000Z',
+            endTime: '2026-06-10T15:00:00.000Z',
             userId: 'user-1',
             userApartment: '101',
             userBlock: 1,
@@ -205,7 +220,7 @@ describe('BookingService', () => {
   });
 
   describe('findByUser', () => {
-    it('returns paginated user bookings', async () => {
+    it('returns paginated user bookings serialized as ISO UTC', async () => {
       const bookings = [
         {
           id: 'booking-1',
@@ -229,8 +244,8 @@ describe('BookingService', () => {
             resourceId: 'resource-1',
             resourceName: 'Party Hall',
             resourceType: 'hall',
-            startTime: new Date('2026-06-10T12:00:00.000Z'),
-            endTime: new Date('2026-06-10T15:00:00.000Z'),
+            startTime: '2026-06-10T12:00:00.000Z',
+            endTime: '2026-06-10T15:00:00.000Z',
             userId: 'user-1',
             userApartment: '101',
             userBlock: 1,
@@ -242,6 +257,26 @@ describe('BookingService', () => {
         page: 1,
         lastPage: 1,
       });
+      expect(result.data[0].startTime).toMatch(/Z$/);
+      expect(result.data[0].endTime).toMatch(/Z$/);
+    });
+
+    it('keeps UTC instant for a Sao Paulo 08:00 booking and serializes as 11:00Z', async () => {
+      const bookings = [
+        {
+          id: 'booking-2',
+          startTime: new Date('2026-06-10T11:00:00.000Z'),
+          endTime: new Date('2026-06-10T12:00:00.000Z'),
+          needTablesAndChairs: false,
+          user: { id: 'user-1', apartment: '101', block: 1 },
+          resource: { id: 'resource-1', name: 'Court 1', type: 'tennis' },
+        },
+      ];
+
+      jest.spyOn(bookingRepository, 'findAndCount').mockResolvedValue([bookings as Booking[], 1]);
+
+      const result = await service.findByUser('user-1', 1, 10, 'startTime', 'ASC');
+      expect(result.data[0].startTime).toBe('2026-06-10T11:00:00.000Z');
     });
   });
 
@@ -494,6 +529,35 @@ describe('BookingService', () => {
         ),
       ).rejects.toThrow(ForbiddenException);
     });
+
+    it('serializes updated booking timestamps as ISO UTC', async () => {
+      const booking = {
+        id: 'booking-1',
+        user: { id: 'owner-1' },
+        resource: { id: 'resource-1' },
+        startTime: new Date('2026-06-10T10:00:00.000Z'),
+        endTime: new Date('2026-06-10T11:00:00.000Z'),
+        needTablesAndChairs: false,
+      } as unknown as Booking;
+
+      jest.spyOn(bookingRepository, 'findOne').mockResolvedValue(booking);
+      jest.spyOn(resourceService, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hall' } as Resource);
+      jest.spyOn(service, 'checkAvailability').mockResolvedValue({ available: true, message: 'Available' });
+      jest.spyOn(bookingRepository, 'save').mockResolvedValue(booking);
+
+      const result = await service.update(
+        'booking-1',
+        {
+          startTime: new Date('2026-06-11T10:00:00.000Z'),
+          endTime: new Date('2026-06-11T11:00:00.000Z'),
+        },
+        'owner-1',
+        UserRole.RESIDENT,
+      );
+
+      expect(result.booking.startTime).toBe('2026-06-11T10:00:00.000Z');
+      expect(result.booking.endTime).toBe('2026-06-11T11:00:00.000Z');
+    });
   });
 
   describe('getReservedTimes', () => {
@@ -527,8 +591,8 @@ describe('BookingService', () => {
       expect(result).toEqual({
         reservedTimes: [
           {
-            startTime: new Date('2026-03-03T22:00:00.000Z'),
-            endTime: new Date('2026-03-03T23:00:00.000Z'),
+            startTime: '2026-03-03T22:00:00.000Z',
+            endTime: '2026-03-03T23:00:00.000Z',
           },
         ],
       });
