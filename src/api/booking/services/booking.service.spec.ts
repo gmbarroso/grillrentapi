@@ -138,6 +138,12 @@ describe('BookingService', () => {
         BadRequestException,
       );
     });
+
+    it('throws ForbiddenException when non-admin sets bookedOnBehalf', async () => {
+      await expect(
+        service.create({ ...createBookingDto, bookedOnBehalf: 'Family Event' }, 'user-1', UserRole.RESIDENT),
+      ).rejects.toThrow(ForbiddenException);
+    });
   });
 
   describe('findAll', () => {
@@ -311,6 +317,12 @@ describe('BookingService', () => {
         { userId: 'user-1' },
       );
 
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith('booking.startTime < :endOfLocalDayUtcExclusive', {
+        endOfLocalDayUtcExclusive: new Date('2026-06-11T03:00:00.000Z'),
+      });
+      expect(queryBuilder.andWhere).toHaveBeenCalledWith('booking.endTime > :startOfLocalDayUtc', {
+        startOfLocalDayUtc: new Date('2026-06-10T03:00:00.000Z'),
+      });
       expect(result.available).toBe(false);
       expect(result.message).toContain('more than 2 total tennis hours');
     });
@@ -326,9 +338,9 @@ describe('BookingService', () => {
         getMany: jest.fn().mockResolvedValue([
           {
             id: 'booking-1',
-            // 1h overlap in the target UTC day (00:00 -> 01:00)
-            startTime: new Date('2026-06-09T23:00:00.000Z'),
-            endTime: new Date('2026-06-10T01:00:00.000Z'),
+            // 1h overlap in the target Sao Paulo local day (03:00Z -> 04:00Z)
+            startTime: new Date('2026-06-10T02:00:00.000Z'),
+            endTime: new Date('2026-06-10T04:00:00.000Z'),
           },
         ]),
       };
@@ -343,6 +355,54 @@ describe('BookingService', () => {
 
       expect(result.available).toBe(false);
       expect(result.message).toContain('more than 2 total tennis hours');
+    });
+
+    it('allows tennis booking that crosses UTC date but stays on same Sao Paulo local day', async () => {
+      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+      jest.spyOn(bookingRepository, 'find').mockResolvedValue([]);
+
+      const queryBuilder = {
+        leftJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      bookingRepository.createQueryBuilder = jest.fn().mockReturnValue(queryBuilder as any);
+
+      const result = await service.checkAvailability(
+        'resource-1',
+        new Date('2026-03-03T22:00:00.000Z'),
+        new Date('2026-03-03T23:00:00.000Z'),
+        { userId: 'user-1' },
+      );
+
+      expect(result.available).toBe(true);
+    });
+
+    it('rejects tennis booking when start and end fall on different Sao Paulo local days', async () => {
+      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+
+      await expect(
+        service.checkAvailability(
+          'resource-1',
+          new Date('2026-03-04T02:30:00.000Z'),
+          new Date('2026-03-04T03:30:00.000Z'),
+          { userId: 'user-1' },
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects invalid dates in time range validation', async () => {
+      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+
+      await expect(
+        service.checkAvailability(
+          'resource-1',
+          new Date('invalid-date'),
+          new Date('2026-03-03T23:00:00.000Z'),
+          { userId: 'user-1' },
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -414,6 +474,25 @@ describe('BookingService', () => {
       );
 
       expect(booking.user.id).toBe('owner-1');
+    });
+
+    it('throws ForbiddenException when non-admin sets bookedOnBehalf during update', async () => {
+      jest.spyOn(bookingRepository, 'findOne').mockResolvedValue({
+        id: 'booking-1',
+        user: { id: 'owner-1' },
+        resource: { id: 'resource-1' },
+        startTime: new Date('2026-06-10T10:00:00.000Z'),
+        endTime: new Date('2026-06-10T11:00:00.000Z'),
+      } as unknown as Booking);
+
+      await expect(
+        service.update(
+          'booking-1',
+          { bookedOnBehalf: 'Family Event' },
+          'owner-1',
+          UserRole.RESIDENT,
+        ),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 

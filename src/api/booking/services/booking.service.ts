@@ -3,7 +3,6 @@ import {
   NotFoundException,
   Logger,
   BadRequestException,
-  UnauthorizedException,
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -36,7 +35,7 @@ export class BookingService {
 
     if (bookedOnBehalf && userRole !== UserRole.ADMIN) {
       this.logger.warn(`User ID: ${userId} is not authorized to set bookedOnBehalf`);
-      throw new UnauthorizedException('Only admins can set bookedOnBehalf');
+      throw new ForbiddenException('Only admins can set bookedOnBehalf');
     }
 
     if (bookedOnBehalf && bookedOnBehalf.length > 50) {
@@ -102,7 +101,7 @@ export class BookingService {
 
     if (updateBookingDto.bookedOnBehalf && userRole !== UserRole.ADMIN) {
       this.logger.warn(`User ID: ${userId} is not authorized to set bookedOnBehalf`);
-      throw new UnauthorizedException('Only admins can set bookedOnBehalf');
+      throw new ForbiddenException('Only admins can set bookedOnBehalf');
     }
 
     if (updateBookingDto.bookedOnBehalf && updateBookingDto.bookedOnBehalf.length > 50) {
@@ -166,7 +165,7 @@ export class BookingService {
     this.validateTimeRange(startTime, endTime, 'checking availability for');
 
     if (resource.type === 'tennis') {
-      this.ensureSameUtcDay(startTime, endTime, 'Tennis booking');
+      this.ensureSameSaoPauloDay(startTime, endTime, 'Tennis booking');
     }
   
     const existingBookings = await this.bookingRepository.find({
@@ -192,18 +191,15 @@ export class BookingService {
     }
   
     if (resource.type === 'tennis' && options?.userId) {
-      const startOfDay = new Date(startTime);
-      startOfDay.setUTCHours(0, 0, 0, 0);
-      const endOfDay = new Date(startOfDay);
-      endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
+      const [startOfLocalDayUtc, endOfLocalDayUtcExclusive] = this.getSaoPauloUtcDayRangeForInstant(startTime);
 
       const userTennisBookingsQuery = this.bookingRepository
         .createQueryBuilder('booking')
         .leftJoin('booking.resource', 'resource')
         .where('booking.userId = :userId', { userId: options.userId })
         .andWhere('resource.type = :resourceType', { resourceType: 'tennis' })
-        .andWhere('booking.startTime < :endOfDay', { endOfDay })
-        .andWhere('booking.endTime > :startOfDay', { startOfDay });
+        .andWhere('booking.startTime < :endOfLocalDayUtcExclusive', { endOfLocalDayUtcExclusive })
+        .andWhere('booking.endTime > :startOfLocalDayUtc', { startOfLocalDayUtc });
 
       if (options.excludeBookingId) {
         userTennisBookingsQuery.andWhere('booking.id != :excludeBookingId', { excludeBookingId: options.excludeBookingId });
@@ -213,15 +209,15 @@ export class BookingService {
       const totalBookedHours = userTennisBookings.reduce((sum, booking) => {
         const bookingStart = new Date(booking.startTime);
         const bookingEnd = new Date(booking.endTime);
-        const overlapStartMs = Math.max(bookingStart.getTime(), startOfDay.getTime());
-        const overlapEndMs = Math.min(bookingEnd.getTime(), endOfDay.getTime());
+        const overlapStartMs = Math.max(bookingStart.getTime(), startOfLocalDayUtc.getTime());
+        const overlapEndMs = Math.min(bookingEnd.getTime(), endOfLocalDayUtcExclusive.getTime());
         const overlapMs = Math.max(0, overlapEndMs - overlapStartMs);
         return sum + overlapMs / 3_600_000;
       }, 0);
       const requestedHours = (endTime.getTime() - startTime.getTime()) / 3_600_000;
 
       if (totalBookedHours + requestedHours > 2) {
-        this.logger.warn(`User ID: ${options.userId} exceeds daily tennis booking cap on ${startOfDay.toISOString().split('T')[0]}`);
+        this.logger.warn(`User ID: ${options.userId} exceeds daily tennis booking cap on ${startOfLocalDayUtc.toISOString().split('T')[0]}`);
         return { available: false, message: 'User cannot reserve more than 2 total tennis hours in the same day' };
       }
     }
@@ -430,8 +426,39 @@ export class BookingService {
     return [startOfLocalDayUtc, endOfLocalDayUtcExclusive];
   }
 
+  private getSaoPauloUtcDayRangeForInstant(dateTime: Date): [Date, Date] {
+    const instantMs = dateTime.getTime();
+    if (Number.isNaN(instantMs)) {
+      this.logger.warn(`Invalid instant provided for Sao Paulo day range: ${dateTime}`);
+      throw new BadRequestException('Invalid start or end time');
+    }
+
+    const localProxy = new Date(instantMs);
+    localProxy.setUTCHours(localProxy.getUTCHours() - BookingService.SAO_PAULO_UTC_OFFSET_HOURS);
+
+    const localDayStartProxyUtc = new Date(Date.UTC(
+      localProxy.getUTCFullYear(),
+      localProxy.getUTCMonth(),
+      localProxy.getUTCDate(),
+      0, 0, 0, 0,
+    ));
+    localDayStartProxyUtc.setUTCHours(localDayStartProxyUtc.getUTCHours() + BookingService.SAO_PAULO_UTC_OFFSET_HOURS);
+
+    const endOfLocalDayUtcExclusive = new Date(localDayStartProxyUtc);
+    endOfLocalDayUtcExclusive.setUTCDate(endOfLocalDayUtcExclusive.getUTCDate() + 1);
+
+    return [localDayStartProxyUtc, endOfLocalDayUtcExclusive];
+  }
+
   private validateTimeRange(startTime: Date, endTime: Date, action: string) {
-    if (endTime.getTime() <= startTime.getTime()) {
+    const startMs = startTime.getTime();
+    const endMs = endTime.getTime();
+    if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+      this.logger.warn(`Invalid start or end time when ${action} booking`);
+      throw new BadRequestException('Invalid start or end time');
+    }
+
+    if (endMs <= startMs) {
       this.logger.warn(`End time must be after start time when ${action} booking`);
       throw new BadRequestException('End time must be after start time');
     }
@@ -456,11 +483,11 @@ export class BookingService {
     }
   }
 
-  private ensureSameUtcDay(startTime: Date, endTime: Date, bookingLabel: string) {
-    const startsOn = startTime.toISOString().split('T')[0];
-    const endsOn = endTime.toISOString().split('T')[0];
-    if (startsOn !== endsOn) {
-      this.logger.warn(`${bookingLabel} must start and end on the same UTC date`);
+  private ensureSameSaoPauloDay(startTime: Date, endTime: Date, bookingLabel: string) {
+    const [startDayStartUtc] = this.getSaoPauloUtcDayRangeForInstant(startTime);
+    const [endDayStartUtc] = this.getSaoPauloUtcDayRangeForInstant(endTime);
+    if (startDayStartUtc.getTime() !== endDayStartUtc.getTime()) {
+      this.logger.warn(`${bookingLabel} must start and end on the same Sao Paulo date`);
       throw new BadRequestException(`${bookingLabel} must start and end on the same day`);
     }
   }
