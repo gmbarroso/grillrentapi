@@ -7,7 +7,7 @@ import { CreateBookingDto } from '../dto/create-booking.dto';
 import { ResourceService } from '../../resource/services/resource.service';
 import { User, UserRole } from '../../user/entities/user.entity';
 import { Resource } from '../../resource/entities/resource.entity';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 
 describe('BookingService', () => {
   let service: BookingService;
@@ -86,7 +86,44 @@ describe('BookingService', () => {
     it('throws when startTime is today or in the past', async () => {
       const dto: CreateBookingDto = {
         ...createBookingDto,
-        startTime: new Date(Date.now() - 86_400_000),
+        startTime: new Date(Date.now() + 3_600_000),
+        endTime: new Date(Date.now() + 7_200_000),
+      };
+      jest.spyOn(resourceService, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'grill' } as Resource);
+
+      await expect(service.create(dto, 'user-1', UserRole.RESIDENT)).rejects.toThrow(BadRequestException);
+    });
+
+    it('allows same-day future booking for tennis', async () => {
+      const now = Date.now();
+      const dto: CreateBookingDto = {
+        ...createBookingDto,
+        startTime: new Date(now + 3_600_000),
+        endTime: new Date(now + 7_200_000),
+      };
+      const createdBooking = {
+        id: 'booking-1',
+        user: { id: 'user-1' },
+        resource: { id: 'resource-1' },
+      } as unknown as Booking;
+
+      jest.spyOn(service, 'checkAvailability').mockResolvedValue({ available: true, message: 'Available' });
+      jest.spyOn(resourceService, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+      jest.spyOn(userRepository, 'findOne').mockResolvedValue({ id: 'user-1', role: UserRole.RESIDENT } as User);
+      jest.spyOn(bookingRepository, 'create').mockReturnValue(createdBooking);
+      jest.spyOn(bookingRepository, 'save').mockResolvedValue(createdBooking);
+
+      await expect(service.create(dto, 'user-1', UserRole.RESIDENT)).resolves.toEqual({
+        message: 'Booking created successfully',
+        booking: createdBooking,
+      });
+    });
+
+    it('throws when endTime is before startTime', async () => {
+      const dto: CreateBookingDto = {
+        ...createBookingDto,
+        startTime: new Date('2026-06-10T15:00:00.000Z'),
+        endTime: new Date('2026-06-10T14:00:00.000Z'),
       };
 
       await expect(service.create(dto, 'user-1', UserRole.RESIDENT)).rejects.toThrow(BadRequestException);
@@ -94,6 +131,7 @@ describe('BookingService', () => {
 
     it('throws when resource is not available', async () => {
       jest.spyOn(service, 'checkAvailability').mockResolvedValue({ available: false, message: 'Not available' });
+      jest.spyOn(resourceService, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hall' } as Resource);
 
       await expect(service.create(createBookingDto, 'user-1', UserRole.RESIDENT)).rejects.toThrow(
         BadRequestException,
@@ -131,10 +169,10 @@ describe('BookingService', () => {
       const result = await service.findAll(1, 10, 'startTime', 'ASC', '2026-06-10', '2026-06-11');
 
       expect(queryBuilder.andWhere).toHaveBeenCalledWith('booking.startTime >= :startDate', {
-        startDate: '2026-06-10T00:00:00.000Z',
+        startDate: new Date('2026-06-10T00:00:00.000Z'),
       });
       expect(queryBuilder.andWhere).toHaveBeenCalledWith('booking.startTime <= :endDate', {
-        endDate: '2026-06-11T23:59:59.999Z',
+        endDate: new Date('2026-06-11T23:59:59.999Z'),
       });
       expect(result).toEqual({
         data: [
@@ -275,6 +313,36 @@ describe('BookingService', () => {
       expect(result.available).toBe(false);
       expect(result.message).toContain('more than 2 total tennis hours');
     });
+
+    it('counts overlap with day window for tennis cap', async () => {
+      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+      jest.spyOn(bookingRepository, 'find').mockResolvedValue([]);
+
+      const queryBuilder = {
+        leftJoin: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          {
+            id: 'booking-1',
+            // 1h overlap in the target UTC day (00:00 -> 01:00)
+            startTime: new Date('2026-06-09T23:00:00.000Z'),
+            endTime: new Date('2026-06-10T01:00:00.000Z'),
+          },
+        ]),
+      };
+      bookingRepository.createQueryBuilder = jest.fn().mockReturnValue(queryBuilder as any);
+
+      const result = await service.checkAvailability(
+        'resource-1',
+        new Date('2026-06-10T10:00:00.000Z'),
+        new Date('2026-06-10T11:30:00.000Z'),
+        { userId: 'user-1' },
+      );
+
+      expect(result.available).toBe(false);
+      expect(result.message).toContain('more than 2 total tennis hours');
+    });
   });
 
   describe('update', () => {
@@ -294,7 +362,57 @@ describe('BookingService', () => {
           'other-user',
           UserRole.RESIDENT,
         ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('blocks update when endTime is before startTime', async () => {
+      jest.spyOn(bookingRepository, 'findOne').mockResolvedValue({
+        id: 'booking-1',
+        user: { id: 'owner-1' },
+        resource: { id: 'resource-1' },
+        startTime: new Date('2026-06-10T10:00:00.000Z'),
+        endTime: new Date('2026-06-10T11:00:00.000Z'),
+      } as unknown as Booking);
+
+      await expect(
+        service.update(
+          'booking-1',
+          {
+            startTime: new Date('2026-06-11T12:00:00.000Z'),
+            endTime: new Date('2026-06-11T11:00:00.000Z'),
+          },
+          'owner-1',
+          UserRole.RESIDENT,
+        ),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('does not allow mass assignment of userId during update', async () => {
+      const booking = {
+        id: 'booking-1',
+        user: { id: 'owner-1' },
+        resource: { id: 'resource-1' },
+        startTime: new Date('2026-06-10T10:00:00.000Z'),
+        endTime: new Date('2026-06-10T11:00:00.000Z'),
+        needTablesAndChairs: false,
+      } as unknown as Booking;
+      jest.spyOn(bookingRepository, 'findOne').mockResolvedValue(booking);
+      jest.spyOn(resourceService, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hall' } as Resource);
+      jest.spyOn(service, 'checkAvailability').mockResolvedValue({ available: true, message: 'Available' });
+      jest.spyOn(bookingRepository, 'save').mockResolvedValue(booking);
+
+      await service.update(
+        'booking-1',
+        {
+          startTime: new Date('2026-06-11T10:00:00.000Z'),
+          endTime: new Date('2026-06-11T11:00:00.000Z'),
+          userId: 'attacker-user',
+        } as Partial<CreateBookingDto>,
+        'owner-1',
+        UserRole.RESIDENT,
+      );
+
+      expect(booking.user.id).toBe('owner-1');
     });
   });
 });

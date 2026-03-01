@@ -1,4 +1,11 @@
-import { Injectable, NotFoundException, Logger, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Logger,
+  BadRequestException,
+  UnauthorizedException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThanOrEqual, MoreThanOrEqual, FindManyOptions } from 'typeorm';
 import { CreateBookingDto } from '../dto/create-booking.dto';
@@ -38,33 +45,23 @@ export class BookingService {
 
     this.logger.log(`Checking if booking is valid for resource ID: ${resourceId}, start time: ${startTime}, end time: ${endTime}`);
 
-    // Verificar se o horário de início e término são iguais
-    if (new Date(startTime).getTime() === new Date(endTime).getTime()) {
-      this.logger.warn(`Start time and end time cannot be the same: ${startTime}`);
-      throw new BadRequestException('Start time and end time cannot be the same');
-    }
+    const nextStartTime = new Date(startTime);
+    const nextEndTime = new Date(endTime);
+    this.validateTimeRange(nextStartTime, nextEndTime, 'creating');
 
-    // Verificar se a reserva está sendo feita para dias futuros
-    const currentDate = new Date();
-    currentDate.setUTCHours(0, 0, 0, 0);
-    if (new Date(startTime) <= currentDate) {
-      this.logger.warn(`Cannot create booking for today or a past date: ${startTime}`);
-      throw new BadRequestException('Cannot create booking for today or a past date');
-    }
-
-    // Verificar disponibilidade
-    const isAvailable = await this.checkAvailability(resourceId, new Date(startTime), new Date(endTime), { userId });
-
-    if (!isAvailable.available) {
-      this.logger.warn(`Resource ID: ${resourceId} is not available from ${startTime} to ${endTime}`);
-      throw new BadRequestException(isAvailable.message);
-    }
-
-    // Verificar se o recurso existe
     const resource = await this.resourceService.findOne(resourceId);
     if (!resource) {
       this.logger.warn(`Resource not found: ${resourceId}`);
       throw new BadRequestException('Resource not found');
+    }
+    this.validateStartTimePolicy(resource.type, nextStartTime, 'create');
+
+    // Verificar disponibilidade
+    const isAvailable = await this.checkAvailability(resourceId, nextStartTime, nextEndTime, { userId });
+
+    if (!isAvailable.available) {
+      this.logger.warn(`Resource ID: ${resourceId} is not available from ${startTime} to ${endTime}`);
+      throw new BadRequestException(isAvailable.message);
     }
 
     const user = await this.userRepository.findOne({ where: { id: userId } });
@@ -73,12 +70,11 @@ export class BookingService {
       throw new BadRequestException('Invalid user');
     }
 
-    const booking = this.bookingRepository.create({ 
-      ...createBookingDto, 
-      user: { id: user.id } as User, 
-      resource: { id: resource.id } as Resource, 
-      startTime: new Date(startTime).toISOString(), 
-      endTime: new Date(endTime).toISOString(),
+    const booking = this.bookingRepository.create({
+      user: { id: user.id } as User,
+      resource: { id: resource.id } as Resource,
+      startTime: nextStartTime,
+      endTime: nextEndTime,
       needTablesAndChairs,
       bookedOnBehalf: userRole === UserRole.ADMIN ? bookedOnBehalf || undefined : undefined,
     });
@@ -100,7 +96,7 @@ export class BookingService {
 
     if (userRole !== UserRole.ADMIN && booking.user.id !== userId) {
       this.logger.warn(`User ID: ${userId} is not authorized to update booking ID: ${bookingId}`);
-      throw new BadRequestException('You are not authorized to update this booking');
+      throw new ForbiddenException('You are not authorized to update this booking');
     }
 
     if (updateBookingDto.bookedOnBehalf && userRole !== UserRole.ADMIN) {
@@ -117,23 +113,14 @@ export class BookingService {
     const nextEndTime = updateBookingDto.endTime ? new Date(updateBookingDto.endTime) : new Date(booking.endTime);
     const nextResourceId = updateBookingDto.resourceId ?? booking.resource.id;
 
-    if (nextStartTime.getTime() === nextEndTime.getTime()) {
-      this.logger.warn(`Start time and end time cannot be the same when updating booking ID: ${bookingId}`);
-      throw new BadRequestException('Start time and end time cannot be the same');
-    }
-
-    const currentDate = new Date();
-    currentDate.setUTCHours(0, 0, 0, 0);
-    if (nextStartTime <= currentDate) {
-      this.logger.warn(`Cannot update booking for today or a past date: ${nextStartTime.toISOString()}`);
-      throw new BadRequestException('Cannot create booking for today or a past date');
-    }
+    this.validateTimeRange(nextStartTime, nextEndTime, 'updating');
 
     const resource = await this.resourceService.findOne(nextResourceId);
     if (!resource) {
       this.logger.warn(`Resource not found: ${nextResourceId}`);
       throw new BadRequestException('Resource not found');
     }
+    this.validateStartTimePolicy(resource.type, nextStartTime, 'update');
 
     const isAvailable = await this.checkAvailability(nextResourceId, nextStartTime, nextEndTime, {
       userId: booking.user.id,
@@ -144,13 +131,17 @@ export class BookingService {
       throw new BadRequestException(isAvailable.message);
     }
 
-    Object.assign(booking, {
-      ...updateBookingDto,
-      resource: { id: nextResourceId } as Resource,
-      startTime: nextStartTime.toISOString(),
-      endTime: nextEndTime.toISOString(),
-      bookedOnBehalf: userRole === UserRole.ADMIN ? updateBookingDto.bookedOnBehalf : booking.bookedOnBehalf,
-    });
+    booking.resource = { id: nextResourceId } as Resource;
+    booking.startTime = nextStartTime;
+    booking.endTime = nextEndTime;
+
+    if (typeof updateBookingDto.needTablesAndChairs !== 'undefined') {
+      booking.needTablesAndChairs = updateBookingDto.needTablesAndChairs;
+    }
+
+    if (userRole === UserRole.ADMIN && Object.prototype.hasOwnProperty.call(updateBookingDto, 'bookedOnBehalf')) {
+      booking.bookedOnBehalf = updateBookingDto.bookedOnBehalf || undefined;
+    }
 
     await this.bookingRepository.save(booking);
     this.logger.log(`Booking updated successfully: ${booking.id}`);
@@ -169,6 +160,12 @@ export class BookingService {
     if (!resource) {
       this.logger.warn(`Resource not found: ${resourceId}`);
       throw new BadRequestException('Resource not found');
+    }
+
+    this.validateTimeRange(startTime, endTime, 'checking availability for');
+
+    if (resource.type === 'tennis') {
+      this.ensureSameUtcDay(startTime, endTime, 'Tennis booking');
     }
   
     const existingBookings = await this.bookingRepository.find({
@@ -204,8 +201,8 @@ export class BookingService {
         .leftJoin('booking.resource', 'resource')
         .where('booking.userId = :userId', { userId: options.userId })
         .andWhere('resource.type = :resourceType', { resourceType: 'tennis' })
-        .andWhere('booking.startTime >= :startOfDay', { startOfDay: startOfDay.toISOString() })
-        .andWhere('booking.startTime < :endOfDay', { endOfDay: endOfDay.toISOString() });
+        .andWhere('booking.startTime < :endOfDay', { endOfDay })
+        .andWhere('booking.endTime > :startOfDay', { startOfDay });
 
       if (options.excludeBookingId) {
         userTennisBookingsQuery.andWhere('booking.id != :excludeBookingId', { excludeBookingId: options.excludeBookingId });
@@ -213,7 +210,12 @@ export class BookingService {
 
       const userTennisBookings = await userTennisBookingsQuery.getMany();
       const totalBookedHours = userTennisBookings.reduce((sum, booking) => {
-        return sum + (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / 3_600_000;
+        const bookingStart = new Date(booking.startTime);
+        const bookingEnd = new Date(booking.endTime);
+        const overlapStartMs = Math.max(bookingStart.getTime(), startOfDay.getTime());
+        const overlapEndMs = Math.min(bookingEnd.getTime(), endOfDay.getTime());
+        const overlapMs = Math.max(0, overlapEndMs - overlapStartMs);
+        return sum + overlapMs / 3_600_000;
       }, 0);
       const requestedHours = (endTime.getTime() - startTime.getTime()) / 3_600_000;
 
@@ -298,7 +300,7 @@ export class BookingService {
       if (Number.isNaN(startDateTime.getTime())) {
         throw new BadRequestException(`Invalid startDate: ${startDate}`);
       }
-      queryBuilder.andWhere('booking.startTime >= :startDate', { startDate: startDateTime.toISOString() });
+      queryBuilder.andWhere('booking.startTime >= :startDate', { startDate: startDateTime });
     }
 
     if (endDate) {
@@ -306,7 +308,7 @@ export class BookingService {
       if (Number.isNaN(endDateTime.getTime())) {
         throw new BadRequestException(`Invalid endDate: ${endDate}`);
       }
-      queryBuilder.andWhere('booking.startTime <= :endDate', { endDate: endDateTime.toISOString() });
+      queryBuilder.andWhere('booking.startTime <= :endDate', { endDate: endDateTime });
     }
 
     if (sort === 'resourceType') {
@@ -408,5 +410,40 @@ export class BookingService {
     }));
 
     return { reservedTimes };
+  }
+
+  private validateTimeRange(startTime: Date, endTime: Date, action: string) {
+    if (endTime.getTime() <= startTime.getTime()) {
+      this.logger.warn(`End time must be after start time when ${action} booking`);
+      throw new BadRequestException('End time must be after start time');
+    }
+  }
+
+  private validateStartTimePolicy(resourceType: string, startTime: Date, operation: 'create' | 'update') {
+    const now = new Date();
+    if (resourceType === 'tennis') {
+      if (startTime.getTime() <= now.getTime()) {
+        this.logger.warn(`Cannot ${operation} tennis booking in the past: ${startTime.toISOString()}`);
+        throw new BadRequestException(`Cannot ${operation} tennis booking for a past time`);
+      }
+      return;
+    }
+
+    const startOfTomorrowUtc = new Date();
+    startOfTomorrowUtc.setUTCHours(0, 0, 0, 0);
+    startOfTomorrowUtc.setUTCDate(startOfTomorrowUtc.getUTCDate() + 1);
+    if (startTime.getTime() < startOfTomorrowUtc.getTime()) {
+      this.logger.warn(`Cannot ${operation} booking for today or a past date: ${startTime.toISOString()}`);
+      throw new BadRequestException(`Cannot ${operation} booking for today or a past date`);
+    }
+  }
+
+  private ensureSameUtcDay(startTime: Date, endTime: Date, bookingLabel: string) {
+    const startsOn = startTime.toISOString().split('T')[0];
+    const endsOn = endTime.toISOString().split('T')[0];
+    if (startsOn !== endsOn) {
+      this.logger.warn(`${bookingLabel} must start and end on the same UTC date`);
+      throw new BadRequestException(`${bookingLabel} must start and end on the same day`);
+    }
   }
 }
