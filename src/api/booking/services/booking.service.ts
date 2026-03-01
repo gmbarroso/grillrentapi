@@ -53,7 +53,7 @@ export class BookingService {
     }
 
     // Verificar disponibilidade
-    const isAvailable = await this.checkAvailability(resourceId, new Date(startTime), new Date(endTime));
+    const isAvailable = await this.checkAvailability(resourceId, new Date(startTime), new Date(endTime), { userId });
 
     if (!isAvailable.available) {
       this.logger.warn(`Resource ID: ${resourceId} is not available from ${startTime} to ${endTime}`);
@@ -92,10 +92,15 @@ export class BookingService {
   async update(bookingId: string, updateBookingDto: Partial<CreateBookingDto>, userId: string, userRole: string) {
     this.logger.log(`Updating booking ID: ${bookingId} by user ID: ${userId}`);
 
-    const booking = await this.bookingRepository.findOne({ where: { id: bookingId } });
+    const booking = await this.bookingRepository.findOne({ where: { id: bookingId }, relations: ['user', 'resource'] });
     if (!booking) {
       this.logger.warn(`Booking not found: ${bookingId}`);
       throw new NotFoundException('Booking not found');
+    }
+
+    if (userRole !== UserRole.ADMIN && booking.user.id !== userId) {
+      this.logger.warn(`User ID: ${userId} is not authorized to update booking ID: ${bookingId}`);
+      throw new BadRequestException('You are not authorized to update this booking');
     }
 
     if (updateBookingDto.bookedOnBehalf && userRole !== UserRole.ADMIN) {
@@ -108,8 +113,42 @@ export class BookingService {
       throw new BadRequestException('bookedOnBehalf must be a string with a maximum length of 50 characters');
     }
 
+    const nextStartTime = updateBookingDto.startTime ? new Date(updateBookingDto.startTime) : new Date(booking.startTime);
+    const nextEndTime = updateBookingDto.endTime ? new Date(updateBookingDto.endTime) : new Date(booking.endTime);
+    const nextResourceId = updateBookingDto.resourceId ?? booking.resource.id;
+
+    if (nextStartTime.getTime() === nextEndTime.getTime()) {
+      this.logger.warn(`Start time and end time cannot be the same when updating booking ID: ${bookingId}`);
+      throw new BadRequestException('Start time and end time cannot be the same');
+    }
+
+    const currentDate = new Date();
+    currentDate.setUTCHours(0, 0, 0, 0);
+    if (nextStartTime <= currentDate) {
+      this.logger.warn(`Cannot update booking for today or a past date: ${nextStartTime.toISOString()}`);
+      throw new BadRequestException('Cannot create booking for today or a past date');
+    }
+
+    const resource = await this.resourceService.findOne(nextResourceId);
+    if (!resource) {
+      this.logger.warn(`Resource not found: ${nextResourceId}`);
+      throw new BadRequestException('Resource not found');
+    }
+
+    const isAvailable = await this.checkAvailability(nextResourceId, nextStartTime, nextEndTime, {
+      userId: booking.user.id,
+      excludeBookingId: bookingId,
+    });
+    if (!isAvailable.available) {
+      this.logger.warn(`Resource ID: ${nextResourceId} is not available from ${nextStartTime.toISOString()} to ${nextEndTime.toISOString()}`);
+      throw new BadRequestException(isAvailable.message);
+    }
+
     Object.assign(booking, {
       ...updateBookingDto,
+      resource: { id: nextResourceId } as Resource,
+      startTime: nextStartTime.toISOString(),
+      endTime: nextEndTime.toISOString(),
       bookedOnBehalf: userRole === UserRole.ADMIN ? updateBookingDto.bookedOnBehalf : booking.bookedOnBehalf,
     });
 
@@ -118,7 +157,12 @@ export class BookingService {
     return { message: 'Booking updated successfully', booking };
   }
 
-  async checkAvailability(resourceId: string, startTime: Date, endTime: Date) {
+  async checkAvailability(
+    resourceId: string,
+    startTime: Date,
+    endTime: Date,
+    options?: { userId?: string; excludeBookingId?: string },
+  ) {
     this.logger.log(`Checking for existing bookings for resource ID: ${resourceId} from ${startTime} to ${endTime}`);
     
     const resource = await this.resourceRepository.findOne({ where: { id: resourceId } });
@@ -131,11 +175,14 @@ export class BookingService {
       where: { resource: { id: resourceId } },
       relations: ['user'],
     });
+    const filteredBookings = options?.excludeBookingId
+      ? existingBookings.filter((booking) => booking.id !== options.excludeBookingId)
+      : existingBookings;
   
     // Verificação específica para o tipo "grill"
     if (resource.type === 'grill') {
       const bookingDate = startTime.toISOString().split('T')[0];
-      const hasBookingOnSameDay = existingBookings.some(booking => {
+      const hasBookingOnSameDay = filteredBookings.some(booking => {
         const existingBookingDate = new Date(booking.startTime).toISOString().split('T')[0];
         return existingBookingDate === bookingDate;
       });
@@ -146,8 +193,38 @@ export class BookingService {
       }
     }
   
+    if (resource.type === 'tennis' && options?.userId) {
+      const startOfDay = new Date(startTime);
+      startOfDay.setUTCHours(0, 0, 0, 0);
+      const endOfDay = new Date(startOfDay);
+      endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
+
+      const userTennisBookingsQuery = this.bookingRepository
+        .createQueryBuilder('booking')
+        .leftJoin('booking.resource', 'resource')
+        .where('booking.userId = :userId', { userId: options.userId })
+        .andWhere('resource.type = :resourceType', { resourceType: 'tennis' })
+        .andWhere('booking.startTime >= :startOfDay', { startOfDay: startOfDay.toISOString() })
+        .andWhere('booking.startTime < :endOfDay', { endOfDay: endOfDay.toISOString() });
+
+      if (options.excludeBookingId) {
+        userTennisBookingsQuery.andWhere('booking.id != :excludeBookingId', { excludeBookingId: options.excludeBookingId });
+      }
+
+      const userTennisBookings = await userTennisBookingsQuery.getMany();
+      const totalBookedHours = userTennisBookings.reduce((sum, booking) => {
+        return sum + (new Date(booking.endTime).getTime() - new Date(booking.startTime).getTime()) / 3_600_000;
+      }, 0);
+      const requestedHours = (endTime.getTime() - startTime.getTime()) / 3_600_000;
+
+      if (totalBookedHours + requestedHours > 2) {
+        this.logger.warn(`User ID: ${options.userId} exceeds daily tennis booking cap on ${startOfDay.toISOString().split('T')[0]}`);
+        return { available: false, message: 'User cannot reserve more than 2 total tennis hours in the same day' };
+      }
+    }
+
     // Verificação geral para sobreposição de horários
-    for (const booking of existingBookings) {
+    for (const booking of filteredBookings) {
       const existingStartTime = new Date(booking.startTime);
       const existingEndTime = new Date(booking.endTime);
   

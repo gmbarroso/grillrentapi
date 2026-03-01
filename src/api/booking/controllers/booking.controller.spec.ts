@@ -82,15 +82,17 @@ describe('BookingController', () => {
   it('checks availability with Date conversion', async () => {
     const payload = { available: true, message: 'Available' };
     service.checkAvailability.mockResolvedValue(payload);
+    const req = { user: { id: 'user-1' } };
 
     await expect(
-      controller.checkAvailability('resource-1', '2026-06-10T12:00:00.000Z', '2026-06-10T15:00:00.000Z'),
+      controller.checkAvailability('resource-1', '2026-06-10T12:00:00.000Z', '2026-06-10T15:00:00.000Z', req as any),
     ).resolves.toEqual(payload);
 
     expect(service.checkAvailability).toHaveBeenCalledWith(
       'resource-1',
       new Date('2026-06-10T12:00:00.000Z'),
       new Date('2026-06-10T15:00:00.000Z'),
+      { userId: 'user-1' },
     );
   });
 });
