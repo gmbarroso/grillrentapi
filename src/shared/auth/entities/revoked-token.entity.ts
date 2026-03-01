@@ -10,4 +10,7 @@ export class RevokedToken {
 
   @Column()
   expirationDate: Date;
+
+  @Column({ type: 'uuid', nullable: true })
+  organizationId?: string;
 }

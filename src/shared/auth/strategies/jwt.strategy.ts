@@ -16,9 +16,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: any) {
     const isValidRole = payload?.role === UserRole.ADMIN || payload?.role === UserRole.RESIDENT;
-    if (!payload?.sub || !payload?.name || !payload?.exp || !isValidRole) {
+    const isValidOrganizationId = typeof payload?.organizationId === 'string'
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(payload.organizationId);
+    if (!payload?.sub || !payload?.name || !payload?.exp || !isValidRole || !isValidOrganizationId) {
       throw new UnauthorizedException('Invalid token payload');
     }
-    return { id: payload.sub, name: payload.name, role: payload.role };
+    return { id: payload.sub, name: payload.name, role: payload.role, organizationId: payload.organizationId };
   }
 }

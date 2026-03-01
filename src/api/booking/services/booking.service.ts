@@ -28,7 +28,7 @@ export class BookingService {
     private readonly resourceService: ResourceService,
   ) {}
 
-  async create(createBookingDto: CreateBookingDto, userId: string, userRole: string) {
+  async create(createBookingDto: CreateBookingDto, userId: string, userRole: string, organizationId: string) {
     this.logger.log(`Creating booking for user ID: ${userId}`);
 
     const { resourceId, startTime, endTime, needTablesAndChairs, bookedOnBehalf } = createBookingDto;
@@ -49,7 +49,7 @@ export class BookingService {
     const nextEndTime = new Date(endTime);
     this.validateTimeRange(nextStartTime, nextEndTime, 'creating');
 
-    const resource = await this.resourceService.findOne(resourceId);
+    const resource = await this.resourceService.findOne(resourceId, organizationId);
     if (!resource) {
       this.logger.warn(`Resource not found: ${resourceId}`);
       throw new BadRequestException('Resource not found');
@@ -57,14 +57,14 @@ export class BookingService {
     this.validateStartTimePolicy(resource.type, nextStartTime, 'create');
 
     // Verificar disponibilidade
-    const isAvailable = await this.checkAvailability(resourceId, nextStartTime, nextEndTime, { userId });
+    const isAvailable = await this.checkAvailability(resourceId, nextStartTime, nextEndTime, { userId, organizationId });
 
     if (!isAvailable.available) {
       this.logger.warn(`Resource ID: ${resourceId} is not available from ${startTime} to ${endTime}`);
       throw new BadRequestException(isAvailable.message);
     }
 
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const user = await this.userRepository.findOne({ where: { id: userId, organizationId } });
     if (!user) {
       this.logger.warn(`User not found: ${userId}`);
       throw new BadRequestException('Invalid user');
@@ -75,6 +75,7 @@ export class BookingService {
       resource: { id: resource.id } as Resource,
       startTime: nextStartTime,
       endTime: nextEndTime,
+      organizationId,
       needTablesAndChairs,
       bookedOnBehalf: userRole === UserRole.ADMIN ? bookedOnBehalf || undefined : undefined,
     });
@@ -85,10 +86,19 @@ export class BookingService {
     return { message: 'Booking created successfully', booking: this.serializeBookingTimestampFields(booking) };
   }
 
-  async update(bookingId: string, updateBookingDto: Partial<CreateBookingDto>, userId: string, userRole: string) {
+  async update(
+    bookingId: string,
+    updateBookingDto: Partial<CreateBookingDto>,
+    userId: string,
+    userRole: string,
+    organizationId: string,
+  ) {
     this.logger.log(`Updating booking ID: ${bookingId} by user ID: ${userId}`);
 
-    const booking = await this.bookingRepository.findOne({ where: { id: bookingId }, relations: ['user', 'resource'] });
+    const booking = await this.bookingRepository.findOne({
+      where: { id: bookingId, organizationId },
+      relations: ['user', 'resource'],
+    });
     if (!booking) {
       this.logger.warn(`Booking not found: ${bookingId}`);
       throw new NotFoundException('Booking not found');
@@ -115,7 +125,7 @@ export class BookingService {
 
     this.validateTimeRange(nextStartTime, nextEndTime, 'updating');
 
-    const resource = await this.resourceService.findOne(nextResourceId);
+    const resource = await this.resourceService.findOne(nextResourceId, organizationId);
     if (!resource) {
       this.logger.warn(`Resource not found: ${nextResourceId}`);
       throw new BadRequestException('Resource not found');
@@ -124,6 +134,7 @@ export class BookingService {
 
     const isAvailable = await this.checkAvailability(nextResourceId, nextStartTime, nextEndTime, {
       userId: booking.user.id,
+      organizationId,
       excludeBookingId: bookingId,
     });
     if (!isAvailable.available) {
@@ -152,11 +163,17 @@ export class BookingService {
     resourceId: string,
     startTime: Date,
     endTime: Date,
-    options?: { userId?: string; excludeBookingId?: string },
+    options?: { userId?: string; organizationId?: string; excludeBookingId?: string },
   ) {
     this.logger.log(`Checking for existing bookings for resource ID: ${resourceId} from ${startTime} to ${endTime}`);
     
-    const resource = await this.resourceRepository.findOne({ where: { id: resourceId } });
+    if (!options?.organizationId) {
+      throw new BadRequestException('Organization context is required');
+    }
+
+    const resource = await this.resourceRepository.findOne({
+      where: { id: resourceId, organizationId: options.organizationId },
+    });
     if (!resource) {
       this.logger.warn(`Resource not found: ${resourceId}`);
       throw new BadRequestException('Resource not found');
@@ -169,7 +186,7 @@ export class BookingService {
     }
   
     const existingBookings = await this.bookingRepository.find({
-      where: { resource: { id: resourceId } },
+      where: { resource: { id: resourceId }, organizationId: options.organizationId },
       relations: ['user'],
     });
     const filteredBookings = options?.excludeBookingId
@@ -197,6 +214,7 @@ export class BookingService {
         .createQueryBuilder('booking')
         .leftJoin('booking.resource', 'resource')
         .where('booking.userId = :userId', { userId: options.userId })
+        .andWhere('booking.organizationId = :organizationId', { organizationId: options.organizationId })
         .andWhere('resource.type = :resourceType', { resourceType: 'tennis' })
         .andWhere('booking.startTime < :endOfLocalDayUtcExclusive', { endOfLocalDayUtcExclusive })
         .andWhere('booking.endTime > :startOfLocalDayUtc', { startOfLocalDayUtc });
@@ -239,10 +257,17 @@ export class BookingService {
     return { available: true, message: 'Available' };
   }
 
-  async findByUser(userId: string, page: number = 1, limit: number = 10, sort: string = 'startTime', order: 'ASC' | 'DESC' = 'ASC') {
+  async findByUser(
+    userId: string,
+    organizationId: string,
+    page: number = 1,
+    limit: number = 10,
+    sort: string = 'startTime',
+    order: 'ASC' | 'DESC' = 'ASC',
+  ) {
     this.logger.log(`Fetching bookings for user ID: ${userId} with pagination and sorting`);
     const options: FindManyOptions<Booking> = {
-      where: { user: { id: userId } },
+      where: { user: { id: userId }, organizationId },
       relations: ['resource', 'user'],
       take: limit,
       skip: (page - 1) * limit,
@@ -272,6 +297,7 @@ export class BookingService {
   }
 
   async findAll(
+    organizationId: string,
     page: number = 1,
     limit: number = 10,
     sort: string = 'startTime',
@@ -289,6 +315,7 @@ export class BookingService {
     const queryBuilder = this.bookingRepository.createQueryBuilder('booking')
       .leftJoinAndSelect('booking.resource', 'resource')
       .leftJoinAndSelect('booking.user', 'user')
+      .where('booking.organizationId = :organizationId', { organizationId })
       .take(limit)
       .skip((page - 1) * limit);
 
@@ -338,16 +365,19 @@ export class BookingService {
     };
   }
 
-  async remove(bookingId: string, userId: string) {
+  async remove(bookingId: string, userId: string, organizationId: string) {
     this.logger.log(`Removing booking ID: ${bookingId} by user ID: ${userId}`);
     
-    const booking = await this.bookingRepository.findOne({ where: { id: bookingId }, relations: ['user'] });
+    const booking = await this.bookingRepository.findOne({
+      where: { id: bookingId, organizationId },
+      relations: ['user'],
+    });
     if (!booking) {
       this.logger.warn(`Booking not found: ${bookingId}`);
       throw new NotFoundException('Booking not found');
     }
   
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const user = await this.userRepository.findOne({ where: { id: userId, organizationId } });
     if (!user) {
       this.logger.warn(`User not found: ${userId}`);
       throw new NotFoundException('User not found');
@@ -363,10 +393,10 @@ export class BookingService {
     return { message: 'Booking removed successfully' };
   }
 
-  async getReservedTimes(resourceType: string, date?: string) {
+  async getReservedTimes(organizationId: string, resourceType: string, date?: string) {
     this.logger.log(`Fetching reserved times for resourceType: ${resourceType}${date ? ` on date: ${date}` : ''}`);
 
-    const resources = await this.resourceRepository.find({ where: { type: resourceType } });
+    const resources = await this.resourceRepository.find({ where: { type: resourceType, organizationId } });
     if (resources.length === 0) {
       this.logger.warn(`No resources found for type: ${resourceType}`);
       throw new BadRequestException(`No resources found for type: ${resourceType}`);
@@ -374,7 +404,7 @@ export class BookingService {
 
     if (resourceType === 'grill') {
       const bookings = await this.bookingRepository.find({
-        where: { resource: { type: resourceType } },
+        where: { resource: { type: resourceType }, organizationId },
         relations: ['resource'],
       });
 
@@ -395,6 +425,7 @@ export class BookingService {
       .createQueryBuilder('booking')
       .leftJoinAndSelect('booking.resource', 'resource')
       .where('resource.type = :resourceType', { resourceType })
+      .andWhere('booking.organizationId = :organizationId', { organizationId })
       .andWhere('booking.startTime < :endOfLocalDayUtcExclusive', { endOfLocalDayUtcExclusive })
       .andWhere('booking.endTime > :startOfLocalDayUtc', { startOfLocalDayUtc })
       .getMany();

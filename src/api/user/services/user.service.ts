@@ -31,9 +31,9 @@ export class UserService {
     return this.userRepository.save(user);
   }
 
-  async getProfile(userId: string) {
+  async getProfile(userId: string, organizationId: string) {
     this.logger.log(`Fetching profile for user ID: ${userId}`);
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const user = await this.userRepository.findOne({ where: { id: userId, organizationId } });
     if (!user) {
       this.logger.warn(`User not found: ${userId}`);
       throw new UnauthorizedException('User not found');
@@ -44,7 +44,9 @@ export class UserService {
 
   async updateProfile(userId: string, updateUserDto: UpdateUserDto, currentUser: User) {
     this.logger.log(`Updating profile for user ID: ${userId}`);
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const user = await this.userRepository.findOne({
+      where: { id: userId, organizationId: currentUser.organizationId },
+    });
     if (!user) {
       this.logger.warn(`User not found: ${userId}`);
       throw new UnauthorizedException('User not found');
@@ -70,15 +72,15 @@ export class UserService {
     return { message: 'User profile updated successfully', user: updatedUser };
   }
 
-  async getAllUsers() {
+  async getAllUsers(organizationId: string) {
     this.logger.log('Fetching all users');
-    const users = await this.userRepository.find();
+    const users = await this.userRepository.find({ where: { organizationId } });
     return { message: 'All users retrieved successfully', users };
   }
 
-  async remove(userId: string) {
+  async remove(userId: string, organizationId: string) {
     this.logger.log(`Removing user ID: ${userId}`);
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const user = await this.userRepository.findOne({ where: { id: userId, organizationId } });
     if (!user) {
       this.logger.warn(`User not found: ${userId}`);
       throw new NotFoundException('User not found');

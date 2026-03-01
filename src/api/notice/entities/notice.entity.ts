@@ -14,6 +14,9 @@ export class Notice {
   @Column('text')
   content: string;
 
+  @Column({ type: 'uuid', nullable: true })
+  organizationId?: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

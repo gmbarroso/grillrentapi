@@ -20,21 +20,21 @@ export class ResourceController {
       this.logger.warn(`User ID: ${user.id} does not have permission to create resources`);
       throw new ForbiddenException('You do not have permission to create resources');
     }
-    return this.resourceService.create(createResourceDto);
+    return this.resourceService.create(createResourceDto, user.organizationId as string);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get()
   async findAll(@User() user: UserEntity) {
     this.logger.log(`Fetching all resources by user ID: ${user.id}`);
-    return this.resourceService.findAll();
+    return this.resourceService.findAll(user.organizationId as string);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get(':id')
   async findOne(@User() user: UserEntity, @Param('id') id: string) {
     this.logger.log(`Fetching resource ID: ${id} by user ID: ${user.id}`);
-    return this.resourceService.findOne(id);
+    return this.resourceService.findOne(id, user.organizationId as string);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -45,7 +45,7 @@ export class ResourceController {
       this.logger.warn(`User ID: ${user.id} does not have permission to update resources`);
       throw new ForbiddenException('You do not have permission to update resources');
     }
-    return this.resourceService.update(id, updateResourceDto);
+    return this.resourceService.update(id, updateResourceDto, user.organizationId as string);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -56,6 +56,6 @@ export class ResourceController {
       this.logger.warn(`User ID: ${user.id} does not have permission to remove resources`);
       throw new ForbiddenException('You do not have permission to remove resources');
     }
-    return this.resourceService.remove(id);
+    return this.resourceService.remove(id, user.organizationId as string);
   }
 }

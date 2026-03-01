@@ -12,6 +12,9 @@ export class Resource {
   @Column()
   type!: string;
 
+  @Column({ type: 'uuid', nullable: true })
+  organizationId?: string;
+
   @OneToMany(() => Booking, booking => booking.resource)
   bookings!: Booking[];
 }

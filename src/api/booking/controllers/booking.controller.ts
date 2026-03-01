@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Logger, Get, Param, Delete, UseGuards, Req, Query, Put } from '@nestjs/common';
+import { Controller, Post, Body, Logger, Get, Param, Delete, UseGuards, Req, Query, Put, UnauthorizedException } from '@nestjs/common';
 import { BookingService } from '../services/booking.service';
 import { CreateBookingDto } from '../dto/create-booking.dto';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
@@ -20,8 +20,9 @@ export class BookingController {
   async create(@Body() createBookingDto: CreateBookingDto, @Req() req: AuthenticatedRequest) {
     const userId = req.user.id.toString();
     const userRole = req.user.role;
+    const organizationId = this.requireOrganizationId(req);
     this.logger.log(`Creating booking for user ID: ${userId}`);
-    return this.bookingService.create(createBookingDto, userId, userRole);
+    return this.bookingService.create(createBookingDto, userId, userRole, organizationId);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -33,13 +34,15 @@ export class BookingController {
   ) {
     const userId = req.user.id.toString();
     const userRole = req.user.role;
+    const organizationId = this.requireOrganizationId(req);
     this.logger.log(`Updating booking ID: ${id} by user ID: ${userId}`);
-    return this.bookingService.update(id, updateBookingDto, userId, userRole);
+    return this.bookingService.update(id, updateBookingDto, userId, userRole, organizationId);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('user/:userId')
   async findByUser(
+    @Req() req: AuthenticatedRequest,
     @Param('userId') userId: string,
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
@@ -47,12 +50,13 @@ export class BookingController {
     @Query('order') order: 'ASC' | 'DESC' = 'ASC',
   ) {
     this.logger.log(`Fetching bookings for user ID: ${userId}`);
-    return this.bookingService.findByUser(userId, page, limit, sort, order);
+    return this.bookingService.findByUser(userId, this.requireOrganizationId(req), page, limit, sort, order);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get()
   async findAll(
+    @Req() req: AuthenticatedRequest,
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
     @Query('sort') sort: string = 'startTime',
@@ -61,7 +65,7 @@ export class BookingController {
     @Query('endDate') endDate?: string,
   ) {
     this.logger.log('Fetching all bookings');
-    return this.bookingService.findAll(page, limit, sort, order, startDate, endDate);
+    return this.bookingService.findAll(this.requireOrganizationId(req), page, limit, sort, order, startDate, endDate);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -69,7 +73,7 @@ export class BookingController {
   async remove(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     const userId = req.user.id.toString();
     this.logger.log(`Removing booking ID: ${id} by user ID: ${userId}`);
-    return this.bookingService.remove(id, userId);
+    return this.bookingService.remove(id, userId, this.requireOrganizationId(req));
   }
 
   @UseGuards(JwtAuthGuard)
@@ -82,16 +86,28 @@ export class BookingController {
   ) {
     const userId = req.user.id.toString();
     this.logger.log(`Checking availability for resource ID: ${resourceId} from ${startTime} to ${endTime}`);
-    return this.bookingService.checkAvailability(resourceId, new Date(startTime), new Date(endTime), { userId });
+    return this.bookingService.checkAvailability(resourceId, new Date(startTime), new Date(endTime), {
+      userId,
+      organizationId: this.requireOrganizationId(req),
+    });
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('reserved-times')
   async getReservedTimes(
+    @Req() req: AuthenticatedRequest,
     @Query('resourceType') resourceType: string,
     @Query('date') date?: string,
   ) {
     this.logger.log(`Fetching reserved times for resourceType: ${resourceType}${date ? ` on date: ${date}` : ''}`);
-    return this.bookingService.getReservedTimes(resourceType, date);
+    return this.bookingService.getReservedTimes(this.requireOrganizationId(req), resourceType, date);
+  }
+
+  private requireOrganizationId(req: AuthenticatedRequest): string {
+    const organizationId = req.user.organizationId;
+    if (!organizationId) {
+      throw new UnauthorizedException('Organization context is missing');
+    }
+    return organizationId;
   }
 }

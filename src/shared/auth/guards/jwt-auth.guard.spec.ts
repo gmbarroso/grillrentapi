@@ -1,4 +1,4 @@
-import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 describe('API JwtAuthGuard', () => {
@@ -23,13 +23,21 @@ describe('API JwtAuthGuard', () => {
   let guard: JwtAuthGuard;
   let parentCanActivateSpy: jest.SpyInstance;
 
-  const createContext = (path: string, bearerToken?: string, internalToken = 'internal-secret'): ExecutionContext =>
+  const orgId = '9dd02335-74fa-487b-99f3-f3e6f9fba2af';
+
+  const createContext = (
+    path: string,
+    bearerToken?: string,
+    internalToken = 'internal-secret',
+    organizationId = orgId,
+  ): ExecutionContext =>
     ({
       switchToHttp: () => ({
         getRequest: () => ({
           url: path,
           headers: {
             ...(internalToken ? { 'x-internal-service-token': internalToken } : {}),
+            ...(organizationId ? { 'x-organization-id': organizationId } : {}),
             ...(bearerToken ? { authorization: `Bearer ${bearerToken}` } : {}),
           },
         }),
@@ -89,6 +97,12 @@ describe('API JwtAuthGuard', () => {
     expect(securityObservability.recordAuthFailure).toHaveBeenCalledWith('token_not_provided', path);
   });
 
+  it.each(API_PROTECTED_PATHS)('denies request without organization header on %s', async (path) => {
+    await expect(guard.canActivate(createContext(path, token, 'internal-secret', ''))).rejects.toThrow(
+      UnauthorizedException,
+    );
+  });
+
   it.each(API_PROTECTED_PATHS)('calls parent passport guard when token is present on %s', async (path) => {
     const context = createContext(path, token);
     await expect(guard.canActivate(context)).resolves.toBe(true);
@@ -104,26 +118,44 @@ describe('API JwtAuthGuard', () => {
   });
 
   it('maps missing user to canonical auth error', () => {
-    expect(() => guard.handleRequest(null, null, { message: 'jwt malformed' })).toThrow(
+    expect(() => guard.handleRequest(null, null, { message: 'jwt malformed' }, createContext('/users/profile', token))).toThrow(
       'Invalid or expired token',
     );
   });
 
+  it('denies organization mismatch as forbidden', () => {
+    const context = createContext('/users/profile', token, 'internal-secret', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+    expect(() =>
+      guard.handleRequest(
+        null,
+        { id: '1', name: 'User', role: 'resident', organizationId: orgId },
+        null,
+        context,
+      ),
+    ).toThrow(ForbiddenException);
+  });
+
   it('preserves invalid token payload error', () => {
-    expect(() => guard.handleRequest(null, null, { message: 'Invalid token payload' })).toThrow(
+    expect(() =>
+      guard.handleRequest(null, null, { message: 'Invalid token payload' }, createContext('/users/profile', token)),
+    ).toThrow(
       'Invalid token payload',
     );
   });
 
   it('maps err path to canonical auth error and records observability', () => {
-    expect(() => guard.handleRequest(new Error('jwt malformed'), null, null)).toThrow(
+    expect(() =>
+      guard.handleRequest(new Error('jwt malformed'), null, null, createContext('/users/profile', token)),
+    ).toThrow(
       'Invalid or expired token',
     );
     expect(securityObservability.recordAuthFailure).toHaveBeenCalledWith('invalid_or_expired_token', 'passport');
   });
 
   it('maps invalid token payload from err path and records observability', () => {
-    expect(() => guard.handleRequest(new Error('Invalid token payload'), null, null)).toThrow(
+    expect(() =>
+      guard.handleRequest(new Error('Invalid token payload'), null, null, createContext('/users/profile', token)),
+    ).toThrow(
       'Invalid token payload',
     );
     expect(securityObservability.recordAuthFailure).toHaveBeenCalledWith('invalid_token_payload', 'passport');

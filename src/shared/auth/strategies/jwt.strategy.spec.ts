@@ -20,9 +20,20 @@ describe('JwtStrategy', () => {
 
   describe('validate', () => {
     it('should return the payload', async () => {
-      const payload = { sub: '1', name: 'Test User', role: 'admin', exp: 9999999999 };
+      const payload = {
+        sub: '1',
+        name: 'Test User',
+        role: 'admin',
+        organizationId: '9dd02335-74fa-487b-99f3-f3e6f9fba2af',
+        exp: 9999999999,
+      };
       const result = await strategy.validate(payload);
-      expect(result).toEqual({ id: '1', name: 'Test User', role: 'admin' });
+      expect(result).toEqual({
+        id: '1',
+        name: 'Test User',
+        role: 'admin',
+        organizationId: '9dd02335-74fa-487b-99f3-f3e6f9fba2af',
+      });
     });
   });
 });
