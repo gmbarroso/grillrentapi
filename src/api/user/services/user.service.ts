@@ -5,17 +5,22 @@ import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { User, UserRole } from '../entities/user.entity';
 import * as bcrypt from 'bcrypt';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
-  private readonly defaultOrganizationId
-    = process.env.DEFAULT_ORGANIZATION_ID || '9dd02335-74fa-487b-99f3-f3e6f9fba2af';
+  private readonly defaultOrganizationId: string;
+  private static readonly LEGACY_DEFAULT_ORGANIZATION_ID = '9dd02335-74fa-487b-99f3-f3e6f9fba2af';
+  private static readonly LOCAL_LIKE_ENVS = new Set(['local', 'development', 'dev', 'test']);
 
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.defaultOrganizationId = this.resolveDefaultOrganizationId();
+  }
 
   async register(createUserDto: CreateUserDto) {
     const { name, email, apartment, block, password, role } = createUserDto;
@@ -91,5 +96,28 @@ export class UserService {
     await this.userRepository.remove(user);
     this.logger.log(`User removed successfully: ${userId}`);
     return { message: 'User removed successfully' };
+  }
+
+  private resolveDefaultOrganizationId(): string {
+    const configuredDefaultOrganizationId = this.configService.get<string>('DEFAULT_ORGANIZATION_ID');
+    const nodeEnv = (this.configService.get<string>('NODE_ENV') || '').trim().toLowerCase();
+    const isLocalLikeEnv = UserService.LOCAL_LIKE_ENVS.has(nodeEnv);
+
+    if (!configuredDefaultOrganizationId) {
+      if (isLocalLikeEnv) {
+        return UserService.LEGACY_DEFAULT_ORGANIZATION_ID;
+      }
+      throw new Error('DEFAULT_ORGANIZATION_ID must be configured in non-local environments');
+    }
+
+    const normalizedOrganizationId = configuredDefaultOrganizationId.trim().toLowerCase();
+    const isValidUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      normalizedOrganizationId,
+    );
+    if (!isValidUuid) {
+      throw new Error('DEFAULT_ORGANIZATION_ID must be a valid UUID');
+    }
+
+    return normalizedOrganizationId;
   }
 }
