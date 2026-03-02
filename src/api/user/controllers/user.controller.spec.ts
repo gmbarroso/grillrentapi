@@ -2,10 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UserController } from './user.controller';
 import { UserService } from '../services/user.service';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
-import { CreateUserDto, CreateUserSchema } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { User, UserRole } from '../entities/user.entity';
-import { JoiValidationPipe } from '../../../shared/pipes/joi-validation.pipe';
 import { ForbiddenException, GoneException } from '@nestjs/common';
 
 describe('UserController', () => {
@@ -19,7 +17,6 @@ describe('UserController', () => {
         {
           provide: UserService,
           useValue: {
-            register: jest.fn(),
             getProfile: jest.fn(),
             updateProfile: jest.fn(),
             getAllUsers: jest.fn(),
@@ -41,21 +38,8 @@ describe('UserController', () => {
   });
 
   describe('register', () => {
-    it('should register a user', async () => {
-      const createUserDto: CreateUserDto = {
-        name: 'testuser',
-        password: 'password123', // 8 characters
-        email: 'testuser@example.com',
-        apartment: '101',
-        block: 1,
-        role: UserRole.RESIDENT,
-      };
-      const user: User = { id: '1', ...createUserDto };
-      const result = { message: 'User registered successfully', user };
-      jest.spyOn(service, 'register').mockResolvedValue(user);
-
-      const validationPipe = new JoiValidationPipe(CreateUserSchema);
-      expect(await controller.register(validationPipe.transform(createUserDto, { type: 'body' }))).toEqual(result);
+    it('should reject client-facing register because BFF owns auth ingress', async () => {
+      await expect(controller.register()).rejects.toThrow(GoneException);
     });
   });
 
@@ -131,7 +115,7 @@ describe('UserController', () => {
       const result = { message: 'All users retrieved successfully', users };
       jest.spyOn(service, 'getAllUsers').mockResolvedValue(result);
 
-      expect(await controller.getAllUsers()).toBe(result);
+      expect(await controller.getAllUsers({ organizationId: 'org-1' } as any)).toBe(result);
     });
   });
 

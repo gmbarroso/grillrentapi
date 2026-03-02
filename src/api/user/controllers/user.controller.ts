@@ -1,8 +1,6 @@
 import { Controller, Post, Body, Logger, Get, Put, Delete, Param, Req, UseGuards, ForbiddenException, UnauthorizedException, GoneException } from '@nestjs/common';
-import { CreateUserDto, CreateUserSchema } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { UserService } from '../services/user.service';
-import { JoiValidationPipe } from '../../../shared/pipes/joi-validation.pipe';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { User } from '../../../shared/auth/decorators/user.decorator';
 import { User as UserEntity, UserRole } from '../entities/user.entity';
@@ -14,10 +12,8 @@ export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Post('register')
-  async register(@Body(new JoiValidationPipe(CreateUserSchema)) createUserDto: CreateUserDto) {
-    this.logger.log(`Registering user: ${createUserDto.name}`);
-    const user = await this.userService.register(createUserDto);
-    return { message: 'User registered successfully', user };
+  async register() {
+    throw new GoneException('This endpoint is deprecated. Use POST /users/register in grillrentbff_v2.');
   }
 
   @Post('login')
