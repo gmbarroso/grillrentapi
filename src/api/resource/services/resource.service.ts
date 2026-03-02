@@ -14,27 +14,29 @@ export class ResourceService {
     private readonly resourceRepository: Repository<Resource>,
   ) {}
 
-  async create(createResourceDto: CreateResourceDto) {
+  async create(createResourceDto: CreateResourceDto, organizationId: string) {
     this.logger.log(`Creating resource with type: ${createResourceDto.type}`);
-    const existingResource = await this.resourceRepository.findOne({ where: { type: createResourceDto.type } });
+    const existingResource = await this.resourceRepository.findOne({
+      where: { type: createResourceDto.type, organizationId },
+    });
     if (existingResource) {
       this.logger.warn(`Resource with type: ${createResourceDto.type} already exists`);
       throw new ConflictException('Resource with this type already exists');
     }
-    const resource = this.resourceRepository.create(createResourceDto);
+    const resource = this.resourceRepository.create({ ...createResourceDto, organizationId });
     await this.resourceRepository.save(resource);
     this.logger.log(`Resource created successfully with type: ${createResourceDto.type}`);
     return { message: 'Resource created successfully' };
   }
 
-  async findAll() {
+  async findAll(organizationId: string) {
     this.logger.log('Fetching all resources');
-    return this.resourceRepository.find();
+    return this.resourceRepository.find({ where: { organizationId } });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, organizationId: string) {
     this.logger.log(`Fetching resource with ID: ${id}`);
-    const resource = await this.resourceRepository.findOne({ where: { id } });
+    const resource = await this.resourceRepository.findOne({ where: { id, organizationId } });
     if (!resource) {
       this.logger.warn(`Resource with ID: ${id} not found`);
       throw new NotFoundException(`Resource with ID ${id} not found`);
@@ -42,12 +44,16 @@ export class ResourceService {
     return resource;
   }
 
-  async update(id: string, updateResourceDto: UpdateResourceDto) {
+  async update(id: string, updateResourceDto: UpdateResourceDto, organizationId: string) {
     this.logger.log(`Updating resource with ID: ${id}`);
-    const resource = await this.resourceRepository.preload({
-      id,
-      ...updateResourceDto,
-    });
+    const existing = await this.resourceRepository.findOne({ where: { id, organizationId } });
+    const resource = existing
+      ? await this.resourceRepository.preload({
+          id,
+          ...updateResourceDto,
+          organizationId,
+        })
+      : null;
     if (!resource) {
       this.logger.warn(`Resource with ID: ${id} not found`);
       throw new NotFoundException(`Resource with ID ${id} not found`);
@@ -55,9 +61,9 @@ export class ResourceService {
     return this.resourceRepository.save(resource);
   }
 
-  async remove(id: string) {
+  async remove(id: string, organizationId: string) {
     this.logger.log(`Removing resource with ID: ${id}`);
-    const resource = await this.resourceRepository.findOne({ where: { id } });
+    const resource = await this.resourceRepository.findOne({ where: { id, organizationId } });
     if (!resource) {
       this.logger.warn(`Resource with ID: ${id} not found`);
       throw new NotFoundException(`Resource with ID ${id} not found`);

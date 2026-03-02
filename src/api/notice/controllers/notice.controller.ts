@@ -6,7 +6,7 @@ import { UserRole } from '../../user/entities/user.entity';
 import { Request } from 'express';
 
 interface AuthenticatedRequest extends Request {
-  user: { id: string; role: string };
+  user: { id: string; role: string; organizationId: string };
 }
 
 @Controller('notices')
@@ -20,16 +20,17 @@ export class NoticeController {
       throw new ForbiddenException('You do not have permission to create notices');
     }
 
-    return this.noticeService.create(data);
+    return this.noticeService.create(data, req.user.organizationId);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get()
   async findAll(
+    @Req() req: AuthenticatedRequest,
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
   ): Promise<{ data: Notice[]; total: number }> {
-    return this.noticeService.findAll(page, limit);
+    return this.noticeService.findAll(req.user.organizationId, page, limit);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -39,7 +40,7 @@ export class NoticeController {
       throw new ForbiddenException('You do not have permission to update notices');
     }
 
-    return this.noticeService.update(id, data);
+    return this.noticeService.update(id, data, req.user.organizationId);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -49,7 +50,7 @@ export class NoticeController {
       throw new ForbiddenException('You do not have permission to delete notices');
     }
 
-    await this.noticeService.delete(id);
+    await this.noticeService.delete(id, req.user.organizationId);
     return { message: 'Notice deleted successfully' };
   }
 }

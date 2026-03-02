@@ -10,13 +10,18 @@ export class NoticeService {
     private readonly noticeRepository: Repository<Notice>,
   ) {}
 
-  async create(data: Partial<Notice>): Promise<Notice> {
-    const notice = this.noticeRepository.create(data);
+  async create(data: Partial<Notice>, organizationId: string): Promise<Notice> {
+    const notice = this.noticeRepository.create({ ...data, organizationId });
     return this.noticeRepository.save(notice);
   }
 
-  async findAll(page: number = 1, limit: number = 10): Promise<{ data: Notice[]; total: number }> {
+  async findAll(
+    organizationId: string,
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<{ data: Notice[]; total: number }> {
     const [data, total] = await this.noticeRepository.findAndCount({
+      where: { organizationId },
       take: limit,
       skip: (page - 1) * limit,
       order: { createdAt: 'DESC' },
@@ -24,8 +29,8 @@ export class NoticeService {
     return { data, total };
   }
 
-  async update(id: string, data: Partial<Notice>): Promise<Notice> {
-    const notice = await this.noticeRepository.findOne({ where: { id } });
+  async update(id: string, data: Partial<Notice>, organizationId: string): Promise<Notice> {
+    const notice = await this.noticeRepository.findOne({ where: { id, organizationId } });
     if (!notice) {
       throw new NotFoundException('Notice not found');
     }
@@ -33,8 +38,8 @@ export class NoticeService {
     return this.noticeRepository.save(notice);
   }
 
-  async delete(id: string): Promise<void> {
-    const result = await this.noticeRepository.delete(id);
+  async delete(id: string, organizationId: string): Promise<void> {
+    const result = await this.noticeRepository.delete({ id, organizationId });
     if (result.affected === 0) {
       throw new NotFoundException('Notice not found');
     }

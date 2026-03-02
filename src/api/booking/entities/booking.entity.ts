@@ -19,6 +19,9 @@ export class Booking {
   @Column()
   userId!: string;
 
+  @Column({ type: 'uuid', nullable: true })
+  organizationId?: string;
+
   @ManyToOne(() => User)
   @JoinColumn({ name: 'userId' })
   user!: User;

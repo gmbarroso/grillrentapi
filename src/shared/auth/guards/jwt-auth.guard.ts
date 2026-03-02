@@ -1,4 +1,4 @@
-import { Injectable, ExecutionContext, UnauthorizedException, Logger } from '@nestjs/common';
+import { Injectable, ExecutionContext, ForbiddenException, UnauthorizedException, Logger } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -49,6 +49,17 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       throw new UnauthorizedException('Invalid internal service token');
     }
 
+    const rawOrganizationHeader = request.headers['x-organization-id'];
+    const organizationId = Array.isArray(rawOrganizationHeader) ? rawOrganizationHeader[0] : rawOrganizationHeader;
+    const normalizedOrganizationId = typeof organizationId === 'string' ? organizationId.trim().toLowerCase() : organizationId;
+    const isValidOrganizationId = typeof normalizedOrganizationId === 'string'
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalizedOrganizationId);
+    if (!organizationId || !isValidOrganizationId) {
+      this.securityObservability.recordAuthFailure('invalid_token_payload', request.url);
+      throw new UnauthorizedException('Invalid organization context');
+    }
+    request.headers['x-organization-id'] = normalizedOrganizationId;
+
     const token = request.headers.authorization?.split(' ')[1];
     if (!token) {
       this.logger.warn('Token not provided');
@@ -66,8 +77,14 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     return super.canActivate(context) as Promise<boolean>;
   }
 
-  handleRequest(err, user, info) {
+  handleRequest(err, user, info, context) {
     const infoMessage = info?.message;
+    const request = context?.switchToHttp?.().getRequest?.();
+    const rawOrganizationHeader = request?.headers?.['x-organization-id'];
+    const organizationHeader = Array.isArray(rawOrganizationHeader) ? rawOrganizationHeader[0] : rawOrganizationHeader;
+    const normalizedOrganizationHeader = typeof organizationHeader === 'string'
+      ? organizationHeader.trim().toLowerCase()
+      : organizationHeader;
 
     if (err) {
       const errorMessage = err.message || infoMessage || 'unknown reason';
@@ -88,6 +105,13 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       }
       this.securityObservability.recordAuthFailure('invalid_or_expired_token', 'passport');
       throw new UnauthorizedException('Invalid or expired token');
+    }
+    const normalizedUserOrganizationId = typeof user.organizationId === 'string'
+      ? user.organizationId.trim().toLowerCase()
+      : user.organizationId;
+    if (normalizedOrganizationHeader !== normalizedUserOrganizationId) {
+      this.securityObservability.recordAuthFailure('invalid_token_payload', request?.url || 'passport');
+      throw new ForbiddenException('Organization context mismatch');
     }
     this.logger.log(`Authenticated user: ${user.name}`);
     return user;

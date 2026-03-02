@@ -7,8 +7,8 @@ export enum UserRole {
 }
 
 @Entity()
-@Unique(['email'])
-@Unique(['apartment', 'block'])
+@Unique(['organizationId', 'email'])
+@Unique(['organizationId', 'apartment', 'block'])
 export class User {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -42,4 +42,7 @@ export class User {
     default: UserRole.RESIDENT,
   })
   role!: UserRole;
+
+  @Column({ type: 'uuid', nullable: true })
+  organizationId?: string;
 }

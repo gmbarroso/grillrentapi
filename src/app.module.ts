@@ -7,6 +7,7 @@ import { BookingModule } from './api/booking/booking.module';
 import { LoggerMiddleware } from './middleware/logger.middleware';
 import { NoticeModule } from './api/notice/notice.module';
 import { SecurityModule } from './shared/security/security.module';
+import { OrganizationModule } from './api/organization/organization.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { SecurityModule } from './shared/security/security.module';
     ResourceModule,
     BookingModule,
     NoticeModule,
+    OrganizationModule,
     SecurityModule,
   ],
   controllers: [],

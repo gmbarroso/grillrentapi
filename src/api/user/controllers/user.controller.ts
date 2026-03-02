@@ -34,7 +34,7 @@ export class UserController {
   @Get('profile')
   async getProfile(@User() user: UserEntity) {
     this.logger.log(`Fetching profile for user ID: ${user.id}`);
-    return this.userService.getProfile(user.id);
+    return this.userService.getProfile(user.id, user.organizationId as string);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -56,9 +56,9 @@ export class UserController {
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  async getAllUsers() {
+  async getAllUsers(@User() user: UserEntity) {
     this.logger.log('Fetching all users');
-    return this.userService.getAllUsers();
+    return this.userService.getAllUsers(user.organizationId as string);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -70,6 +70,6 @@ export class UserController {
       throw new ForbiddenException('You do not have permission to delete users');
     }
     this.logger.log(`Removing user ID: ${id}`);
-    return this.userService.remove(id);
+    return this.userService.remove(id, currentUser.organizationId as string);
   }
 }
