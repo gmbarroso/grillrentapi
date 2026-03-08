@@ -34,7 +34,7 @@ describe('ResourceService', () => {
     it('should create a resource', async () => {
       const createResourceDto: CreateResourceDto = {
         name: 'Test Resource',
-        type: 'Test Type'
+        type: 'hourly'
       };
       const resource: Resource = { id: '1', ...createResourceDto, bookings: [] };
       const result = { message: 'Resource created successfully' };
@@ -53,8 +53,8 @@ describe('ResourceService', () => {
   describe('findAll', () => {
     it('should find all resources', async () => {
       const resources: Resource[] = [
-        { id: '1', name: 'Test Resource 1', type: 'Test Type 1', bookings: [] },
-        { id: '2', name: 'Test Resource 2', type: 'Test Type 2', bookings: [] },
+        { id: '1', name: 'Test Resource 1', type: 'hourly', bookings: [] },
+        { id: '2', name: 'Test Resource 2', type: 'daily', bookings: [] },
       ];
 
       jest.spyOn(repository, 'find').mockResolvedValue(resources as any);
@@ -65,7 +65,7 @@ describe('ResourceService', () => {
 
   describe('findOne', () => {
     it('should find one resource', async () => {
-      const resource: Resource = { id: '1', name: 'Test Resource', type: 'Test Type', bookings: [] };
+      const resource: Resource = { id: '1', name: 'Test Resource', type: 'hourly', bookings: [] };
 
       jest.spyOn(repository, 'findOne').mockResolvedValue(resource as any);
 
@@ -83,7 +83,7 @@ describe('ResourceService', () => {
     it('should update a resource', async () => {
       const updateResourceDto: UpdateResourceDto = {
         name: 'Updated Resource',
-        type: 'Updated Type',
+        type: 'daily',
       };
       const resource: Resource = { 
         id: '1', 
@@ -109,7 +109,7 @@ describe('ResourceService', () => {
 
   describe('remove', () => {
     it('should remove a resource', async () => {
-      const resource: Resource = { id: '1', name: 'Test Resource', type: 'Test Type', bookings: [] };
+      const resource: Resource = { id: '1', name: 'Test Resource', type: 'hourly', bookings: [] };
       const result = { message: 'Resource removed successfully' };
 
       jest.spyOn(repository, 'findOne').mockResolvedValue(resource as any);

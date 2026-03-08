@@ -189,8 +189,8 @@ export class BookingService {
       ? existingBookings.filter((booking) => booking.id !== options.excludeBookingId)
       : existingBookings;
   
-    // Verificação específica para o tipo "grill"
-    if (resource.type === 'grill') {
+    // Daily resources can only be booked once per day.
+    if (resource.type === 'daily') {
       const bookingDate = startTime.toISOString().split('T')[0];
       const hasBookingOnSameDay = filteredBookings.some(booking => {
         const existingBookingDate = new Date(booking.startTime).toISOString().split('T')[0];
@@ -198,8 +198,8 @@ export class BookingService {
       });
   
       if (hasBookingOnSameDay) {
-        this.logger.warn(`Resource ID: ${resourceId} (type: grill) already has a booking on ${bookingDate}`);
-        return { available: false, message: `Resource of type "grill" is already booked on ${bookingDate}` };
+        this.logger.warn(`Resource ID: ${resourceId} (type: daily) already has a booking on ${bookingDate}`);
+        return { available: false, message: `Resource of type "daily" is already booked on ${bookingDate}` };
       }
     }
   
@@ -398,7 +398,7 @@ export class BookingService {
       throw new BadRequestException(`No resources found for type: ${resourceType}`);
     }
 
-    if (resourceType === 'grill') {
+    if (resourceType === 'daily') {
       const bookings = await this.bookingRepository.find({
         where: { resource: { type: resourceType }, organizationId },
         relations: ['resource'],
@@ -411,8 +411,8 @@ export class BookingService {
     }
 
     if (!date) {
-      this.logger.warn('Date parameter is required for non-grill resources');
-      throw new BadRequestException('Date parameter is required for non-grill resources');
+      this.logger.warn('Date parameter is required for hourly resources');
+      throw new BadRequestException('Date parameter is required for hourly resources');
     }
 
     const [startOfLocalDayUtc, endOfLocalDayUtcExclusive] = this.getSaoPauloUtcDayRange(date);
