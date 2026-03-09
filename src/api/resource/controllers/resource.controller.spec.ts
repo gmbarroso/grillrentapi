@@ -44,7 +44,7 @@ describe('ResourceController', () => {
     it('should create a resource', async () => {
       const createResourceDto: CreateResourceDto = {
         name: 'Test Resource',
-        type: 'Test Type',
+        type: 'hourly',
       };
       const resource: Resource = { id: '1', ...createResourceDto, bookings: [] };
       const result = { message: 'Resource created successfully', resource };
@@ -66,7 +66,7 @@ describe('ResourceController', () => {
     it('should return an error if user is not admin', async () => {
       const createResourceDto: CreateResourceDto = {
         name: 'Test Resource',
-        type: 'Test Type',
+        type: 'hourly',
       };
       const user: User = {
         id: '1',
@@ -85,8 +85,8 @@ describe('ResourceController', () => {
   describe('findAll', () => {
     it('should find all resources', async () => {
       const resources: Resource[] = [
-        { id: '1', name: 'Test Resource 1', type: 'Test Type 1', bookings: [] },
-        { id: '2', name: 'Test Resource 2', type: 'Test Type 2', bookings: [] },
+        { id: '1', name: 'Test Resource 1', type: 'hourly', bookings: [] },
+        { id: '2', name: 'Test Resource 2', type: 'daily', bookings: [] },
       ];
       const user: User = {
         id: '1',
@@ -106,7 +106,7 @@ describe('ResourceController', () => {
 
   describe('findOne', () => {
     it('should find one resource', async () => {
-      const resource: Resource = { id: '1', name: 'Test Resource', type: 'Test Type', bookings: [] };
+      const resource: Resource = { id: '1', name: 'Test Resource', type: 'hourly', bookings: [] };
       const user: User = {
         id: '1',
         name: 'adminuser',
@@ -127,7 +127,7 @@ describe('ResourceController', () => {
     it('should update a resource', async () => {
       const updateResourceDto: UpdateResourceDto = {
         name: 'Updated Resource',
-        type: 'Updated Type',
+        type: 'daily',
       };
       const resource: Resource = { id: '1', name: updateResourceDto.name || '', type: updateResourceDto.type || '', bookings: [] };
       const user: User = {

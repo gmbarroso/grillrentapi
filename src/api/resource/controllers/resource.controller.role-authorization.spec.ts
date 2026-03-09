@@ -40,8 +40,8 @@ describe('Phase 5 - API role authorization regression', () => {
 
   it('allows admin and denies resident on protected write operations', async () => {
     await expect(
-      controller.create(adminUser as any, { name: 'Grill', type: 'common' }),
-    ).resolves.toEqual({ id: 'resource-1', name: 'Grill', type: 'common' });
+      controller.create(adminUser as any, { name: 'Grill', type: 'hourly' }),
+    ).resolves.toEqual({ id: 'resource-1', name: 'Grill', type: 'hourly' });
     await expect(
       controller.update(adminUser as any, 'resource-1', { name: 'Updated Grill' }),
     ).resolves.toEqual({ id: 'resource-1', name: 'Updated Grill' });
@@ -50,7 +50,7 @@ describe('Phase 5 - API role authorization regression', () => {
     ).resolves.toEqual({ message: 'removed:resource-1' });
 
     await expect(
-      controller.create(residentUser as any, { name: 'Grill', type: 'common' }),
+      controller.create(residentUser as any, { name: 'Grill', type: 'hourly' }),
     ).rejects.toThrow(ForbiddenException);
     await expect(
       controller.update(residentUser as any, 'resource-1', { name: 'Updated Grill' }),
