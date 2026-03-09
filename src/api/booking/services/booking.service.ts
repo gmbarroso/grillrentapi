@@ -177,8 +177,8 @@ export class BookingService {
 
     this.validateTimeRange(startTime, endTime, 'checking availability for');
 
-    if (resource.type === 'tennis') {
-      this.ensureSameSaoPauloDay(startTime, endTime, 'Tennis booking');
+    if (resource.type === 'hourly') {
+      this.ensureSameSaoPauloDay(startTime, endTime, 'Hourly booking');
     }
   
     const existingBookings = await this.bookingRepository.find({
@@ -204,24 +204,24 @@ export class BookingService {
       }
     }
   
-    if (resource.type === 'tennis' && options?.userId) {
+    if (resource.type === 'hourly' && options?.userId) {
       const [startOfLocalDayUtc, endOfLocalDayUtcExclusive] = this.getSaoPauloUtcDayRangeForInstant(startTime);
 
-      const userTennisBookingsQuery = this.bookingRepository
+      const userHourlyBookingsQuery = this.bookingRepository
         .createQueryBuilder('booking')
         .leftJoin('booking.resource', 'resource')
         .where('booking.userId = :userId', { userId: options.userId })
         .andWhere('booking.organizationId = :organizationId', { organizationId: options.organizationId })
-        .andWhere('resource.type = :resourceType', { resourceType: 'tennis' })
+        .andWhere('resource.type = :resourceType', { resourceType: 'hourly' })
         .andWhere('booking.startTime < :endOfLocalDayUtcExclusive', { endOfLocalDayUtcExclusive })
         .andWhere('booking.endTime > :startOfLocalDayUtc', { startOfLocalDayUtc });
 
       if (options.excludeBookingId) {
-        userTennisBookingsQuery.andWhere('booking.id != :excludeBookingId', { excludeBookingId: options.excludeBookingId });
+        userHourlyBookingsQuery.andWhere('booking.id != :excludeBookingId', { excludeBookingId: options.excludeBookingId });
       }
 
-      const userTennisBookings = await userTennisBookingsQuery.getMany();
-      const totalBookedHours = userTennisBookings.reduce((sum, booking) => {
+      const userHourlyBookings = await userHourlyBookingsQuery.getMany();
+      const totalBookedHours = userHourlyBookings.reduce((sum, booking) => {
         const bookingStart = new Date(booking.startTime);
         const bookingEnd = new Date(booking.endTime);
         const overlapStartMs = Math.max(bookingStart.getTime(), startOfLocalDayUtc.getTime());
@@ -232,8 +232,8 @@ export class BookingService {
       const requestedHours = (endTime.getTime() - startTime.getTime()) / 3_600_000;
 
       if (totalBookedHours + requestedHours > 2) {
-        this.logger.warn(`User ID: ${options.userId} exceeds daily tennis booking cap on ${startOfLocalDayUtc.toISOString().split('T')[0]}`);
-        return { available: false, message: 'User cannot reserve more than 2 total tennis hours in the same day' };
+        this.logger.warn(`User ID: ${options.userId} exceeds daily hourly booking cap on ${startOfLocalDayUtc.toISOString().split('T')[0]}`);
+        return { available: false, message: 'User cannot reserve more than 2 total hourly hours in the same day' };
       }
     }
 
@@ -517,16 +517,16 @@ export class BookingService {
 
   private validateStartTimePolicy(resourceType: string, startTime: Date, operation: 'create' | 'update') {
     const now = new Date();
-    if (resourceType === 'tennis') {
+    if (resourceType === 'hourly') {
       if (startTime.getTime() <= now.getTime()) {
-        this.logger.warn(`Cannot ${operation} tennis booking in the past: ${startTime.toISOString()}`);
-        throw new BadRequestException(`Cannot ${operation} tennis booking for a past time`);
+        this.logger.warn(`Cannot ${operation} hourly booking in the past: ${startTime.toISOString()}`);
+        throw new BadRequestException(`Cannot ${operation} hourly booking for a past time`);
       }
       return;
     }
 
-    const startOfTomorrowUtc = new Date();
-    startOfTomorrowUtc.setUTCHours(0, 0, 0, 0);
+    const [startOfTodaySaoPauloUtc] = this.getSaoPauloUtcDayRangeForInstant(now);
+    const startOfTomorrowUtc = new Date(startOfTodaySaoPauloUtc);
     startOfTomorrowUtc.setUTCDate(startOfTomorrowUtc.getUTCDate() + 1);
     if (startTime.getTime() < startOfTomorrowUtc.getTime()) {
       this.logger.warn(`Cannot ${operation} booking for today or a past date: ${startTime.toISOString()}`);
