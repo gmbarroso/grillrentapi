@@ -191,10 +191,11 @@ export class BookingService {
   
     // Daily resources can only be booked once per day.
     if (resource.type === 'daily') {
-      const bookingDate = startTime.toISOString().split('T')[0];
+      const [requestedDayStartUtc] = this.getSaoPauloUtcDayRangeForInstant(startTime);
+      const bookingDate = requestedDayStartUtc.toISOString().split('T')[0];
       const hasBookingOnSameDay = filteredBookings.some(booking => {
-        const existingBookingDate = new Date(booking.startTime).toISOString().split('T')[0];
-        return existingBookingDate === bookingDate;
+        const [existingDayStartUtc] = this.getSaoPauloUtcDayRangeForInstant(new Date(booking.startTime));
+        return existingDayStartUtc.getTime() === requestedDayStartUtc.getTime();
       });
   
       if (hasBookingOnSameDay) {
@@ -405,7 +406,12 @@ export class BookingService {
       });
 
       const reservedDays = Array.from(
-        new Set(bookings.map(booking => new Date(booking.startTime).toISOString().split('T')[0]))
+        new Set(
+          bookings.map(booking => {
+            const [dayStartUtc] = this.getSaoPauloUtcDayRangeForInstant(new Date(booking.startTime));
+            return dayStartUtc.toISOString().split('T')[0];
+          }),
+        ),
       );
       return { reservedDays };
     }
