@@ -34,6 +34,20 @@ export class NoticeController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('unread-count')
+  async getUnreadCount(@Req() req: AuthenticatedRequest): Promise<{ unreadCount: number; lastSeenNoticesAt: string | null }> {
+    return this.noticeService.getUnreadCount(req.user.id, req.user.organizationId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('mark-seen')
+  async markAsSeen(
+    @Req() req: AuthenticatedRequest,
+  ): Promise<{ markedAsSeenAt: string; previousLastSeenNoticesAt: string | null }> {
+    return this.noticeService.markAllAsSeen(req.user.id, req.user.organizationId);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Put(':id')
   async update(@Param('id') id: string, @Body() data: Partial<Notice>, @Req() req: AuthenticatedRequest): Promise<Notice> {
     if (req.user.role !== UserRole.ADMIN) {
