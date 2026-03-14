@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { NoticeService } from './notice.service';
@@ -9,6 +10,17 @@ describe('NoticeService', () => {
   let service: NoticeService;
   let noticeRepository: jest.Mocked<Repository<Notice>>;
   let noticeReadStateRepository: jest.Mocked<Repository<NoticeReadState>>;
+  let configService: jest.Mocked<ConfigService>;
+
+  const defaultEnv: Record<string, string> = {
+    WHATSAPP_EVOLUTION_BASE_URL: 'https://evolution.example.com',
+    WHATSAPP_EVOLUTION_INSTANCE: 'instance-a',
+    WHATSAPP_EVOLUTION_API_KEY: 'secret',
+    WHATSAPP_GROUP_JID_BY_ORG: JSON.stringify({ 'org-1': '120363000000000000@g.us' }),
+    WHATSAPP_SEND_MAX_ATTEMPTS: '2',
+    WHATSAPP_SEND_BASE_BACKOFF_MS: '1',
+    WHATSAPP_SEND_TIMEOUT_MS: '1000',
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -16,12 +28,23 @@ describe('NoticeService', () => {
         NoticeService,
         { provide: getRepositoryToken(Notice), useClass: Repository },
         { provide: getRepositoryToken(NoticeReadState), useClass: Repository },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string) => defaultEnv[key]),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<NoticeService>(NoticeService);
     noticeRepository = module.get(getRepositoryToken(Notice));
     noticeReadStateRepository = module.get(getRepositoryToken(NoticeReadState));
+    configService = module.get(ConfigService);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('returns all organization notices as unread when read state does not exist', async () => {
@@ -95,5 +118,159 @@ describe('NoticeService', () => {
     });
     expect(result.previousLastSeenNoticesAt).toBe('2026-03-02T10:00:00.000Z');
     expect(result.markedAsSeenAt).toBe('2026-03-09T11:00:00.789Z');
+  });
+
+  it('sends whatsapp once and marks notice as sent', async () => {
+    const createdNotice = {
+      id: 'notice-1',
+      title: 'Titulo',
+      subtitle: 'Subtitulo',
+      content: 'Mensagem',
+      sendViaWhatsapp: true,
+      organizationId: 'org-1',
+      whatsappDeliveryStatus: 'pending',
+      whatsappAttemptCount: 0,
+    } as Notice;
+
+    jest.spyOn(noticeRepository, 'create').mockReturnValue(createdNotice);
+
+    const saveSpy = jest
+      .spyOn(noticeRepository, 'save')
+      .mockResolvedValueOnce(createdNotice)
+      .mockImplementation(async (value: Notice) => value as Notice);
+
+    jest.spyOn(noticeRepository, 'findOne').mockResolvedValue(createdNotice);
+
+    (global.fetch as jest.Mock | undefined) = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ key: { id: 'provider-123' } }),
+    });
+
+    const result = await service.create(
+      {
+        title: 'Titulo',
+        subtitle: 'Subtitulo',
+        content: 'Mensagem',
+        sendViaWhatsapp: true,
+      },
+      'org-1',
+    );
+
+    expect(saveSpy).toHaveBeenCalled();
+    expect(result.whatsappDeliveryStatus).toBe('sent');
+    expect(result.whatsappProviderMessageId).toBe('provider-123');
+    expect(result.whatsappAttemptCount).toBe(1);
+  });
+
+  it('does not send duplicate provider message when already sent', async () => {
+    const alreadySent = {
+      id: 'notice-2',
+      title: 'Titulo',
+      content: 'Mensagem',
+      sendViaWhatsapp: true,
+      organizationId: 'org-1',
+      whatsappDeliveryStatus: 'sent',
+      whatsappProviderMessageId: 'provider-abc',
+      whatsappAttemptCount: 1,
+    } as Notice;
+
+    jest.spyOn(noticeRepository, 'create').mockReturnValue(alreadySent);
+    jest.spyOn(noticeRepository, 'save').mockResolvedValue(alreadySent);
+    jest.spyOn(noticeRepository, 'findOne').mockResolvedValue(alreadySent);
+
+    (global.fetch as jest.Mock | undefined) = jest.fn();
+
+    const result = await service.create(
+      {
+        title: 'Titulo',
+        content: 'Mensagem',
+        sendViaWhatsapp: true,
+      },
+      'org-1',
+    );
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(result.whatsappDeliveryStatus).toBe('sent');
+  });
+
+  it('marks notice as failed when provider fails after retries', async () => {
+    const createdNotice = {
+      id: 'notice-3',
+      title: 'Titulo',
+      content: 'Mensagem',
+      sendViaWhatsapp: true,
+      organizationId: 'org-1',
+      whatsappDeliveryStatus: 'pending',
+      whatsappAttemptCount: 0,
+    } as Notice;
+
+    jest.spyOn(noticeRepository, 'create').mockReturnValue(createdNotice);
+    jest
+      .spyOn(noticeRepository, 'save')
+      .mockResolvedValueOnce(createdNotice)
+      .mockImplementation(async (value: Notice) => value as Notice);
+    jest.spyOn(noticeRepository, 'findOne').mockResolvedValue(createdNotice);
+
+    (global.fetch as jest.Mock | undefined) = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      text: async () => JSON.stringify({ message: 'temporary error' }),
+    });
+
+    const result = await service.create(
+      {
+        title: 'Titulo',
+        content: 'Mensagem',
+        sendViaWhatsapp: true,
+      },
+      'org-1',
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(result.whatsappDeliveryStatus).toBe('failed');
+    expect(result.whatsappAttemptCount).toBe(2);
+    expect(result.whatsappLastError).toContain('Provider rejected notice message');
+  });
+
+  it('marks as skipped when organization whatsapp group is not configured', async () => {
+    jest.spyOn(configService, 'get').mockImplementation((key: string) => {
+      if (key === 'WHATSAPP_GROUP_JID_BY_ORG') {
+        return JSON.stringify({});
+      }
+      return defaultEnv[key];
+    });
+
+    const createdNotice = {
+      id: 'notice-4',
+      title: 'Titulo',
+      content: 'Mensagem',
+      sendViaWhatsapp: true,
+      organizationId: 'org-1',
+      whatsappDeliveryStatus: 'pending',
+      whatsappAttemptCount: 0,
+    } as Notice;
+
+    jest.spyOn(noticeRepository, 'create').mockReturnValue(createdNotice);
+    jest
+      .spyOn(noticeRepository, 'save')
+      .mockResolvedValueOnce(createdNotice)
+      .mockImplementation(async (value: Notice) => value as Notice);
+    jest.spyOn(noticeRepository, 'findOne').mockResolvedValue(createdNotice);
+
+    (global.fetch as jest.Mock | undefined) = jest.fn();
+
+    const result = await service.create(
+      {
+        title: 'Titulo',
+        content: 'Mensagem',
+        sendViaWhatsapp: true,
+      },
+      'org-1',
+    );
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(result.whatsappDeliveryStatus).toBe('skipped');
+    expect(result.whatsappLastError).toContain('not configured');
   });
 });

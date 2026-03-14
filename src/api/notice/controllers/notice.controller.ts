@@ -4,6 +4,9 @@ import { Notice } from '../entities/notice.entity';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { UserRole } from '../../user/entities/user.entity';
 import { Request } from 'express';
+import { JoiValidationPipe } from '../../../shared/pipes/joi-validation.pipe';
+import { CreateNoticeDto, CreateNoticeSchema } from '../dto/create-notice.dto';
+import { UpdateNoticeDto, UpdateNoticeSchema } from '../dto/update-notice.dto';
 
 interface AuthenticatedRequest extends Request {
   user: { id: string; role: string; organizationId: string };
@@ -15,7 +18,10 @@ export class NoticeController {
 
   @UseGuards(JwtAuthGuard)
   @Post()
-  async create(@Body() data: Partial<Notice>, @Req() req: AuthenticatedRequest): Promise<Notice> {
+  async create(
+    @Body(new JoiValidationPipe(CreateNoticeSchema)) data: CreateNoticeDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<Notice> {
     if (req.user.role !== UserRole.ADMIN) {
       throw new ForbiddenException('You do not have permission to create notices');
     }
@@ -49,7 +55,11 @@ export class NoticeController {
 
   @UseGuards(JwtAuthGuard)
   @Put(':id')
-  async update(@Param('id') id: string, @Body() data: Partial<Notice>, @Req() req: AuthenticatedRequest): Promise<Notice> {
+  async update(
+    @Param('id') id: string,
+    @Body(new JoiValidationPipe(UpdateNoticeSchema)) data: UpdateNoticeDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<Notice> {
     if (req.user.role !== UserRole.ADMIN) {
       throw new ForbiddenException('You do not have permission to update notices');
     }

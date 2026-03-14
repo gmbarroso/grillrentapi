@@ -32,16 +32,16 @@ export class Notice {
   whatsappAttemptCount: number;
 
   @Column({ type: 'timestamp', nullable: true })
-  whatsappLastAttemptAt?: Date;
+  whatsappLastAttemptAt?: Date | null;
 
   @Column({ type: 'timestamp', nullable: true })
-  whatsappSentAt?: Date;
+  whatsappSentAt?: Date | null;
 
   @Column({ type: 'varchar', length: 128, nullable: true })
-  whatsappProviderMessageId?: string;
+  whatsappProviderMessageId?: string | null;
 
   @Column({ type: 'text', nullable: true })
-  whatsappLastError?: string;
+  whatsappLastError?: string | null;
 
   @Column({ type: 'uuid', nullable: true })
   organizationId?: string;
