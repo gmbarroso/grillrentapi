@@ -9,5 +9,9 @@ export PORT="${SERVER_PORT}"
 
 echo "[railway-evolution] starting with SERVER_HOST=${SERVER_HOST} SERVER_PORT=${SERVER_PORT}"
 
-# Evolution image already has dependencies and scripts.
-exec npm run start
+# Evolution image is built for production runtime. Use deploy+migrate then start:prod.
+if npm run | grep -q "db:deploy"; then
+  npm run db:deploy
+fi
+
+exec npm run start:prod
