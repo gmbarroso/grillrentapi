@@ -8,6 +8,7 @@ import { LoggerMiddleware } from './middleware/logger.middleware';
 import { NoticeModule } from './api/notice/notice.module';
 import { SecurityModule } from './shared/security/security.module';
 import { OrganizationModule } from './api/organization/organization.module';
+import { WhatsappSettingsModule } from './api/whatsapp-settings/whatsapp-settings.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { OrganizationModule } from './api/organization/organization.module';
     ResourceModule,
     BookingModule,
     NoticeModule,
+    WhatsappSettingsModule,
     OrganizationModule,
     SecurityModule,
   ],

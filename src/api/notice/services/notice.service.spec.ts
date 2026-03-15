@@ -48,66 +48,59 @@ describe('NoticeService', () => {
   });
 
   it('returns hasUnread=true when read state does not exist and notices exist', async () => {
-    jest.spyOn(noticeReadStateRepository, 'findOne').mockResolvedValue(null);
-    jest.spyOn(noticeRepository, 'findOne').mockResolvedValue({
-      id: 'notice-1',
-    } as Notice);
+    const querySpy = jest.spyOn(noticeReadStateRepository, 'query').mockResolvedValue([
+      { hasUnread: true, lastSeenNoticesAt: null },
+    ]);
 
     await expect(service.getUnreadCount('user-1', 'org-1')).resolves.toEqual({
       hasUnread: true,
       lastSeenNoticesAt: null,
     });
 
-    expect(noticeRepository.findOne).toHaveBeenCalledWith({
-      where: { organizationId: 'org-1' },
-      order: { createdAt: 'DESC' },
-      select: ['id'],
-    });
+    expect(querySpy).toHaveBeenCalledWith(expect.stringContaining('WITH "read_state"'), ['user-1', 'org-1']);
   });
 
   it('returns hasUnread=true when there are notices newer than lastSeenNoticesAt', async () => {
-    const lastSeenNoticesAt = new Date('2026-03-01T10:00:00.000Z');
-
-    jest.spyOn(noticeReadStateRepository, 'findOne').mockResolvedValue({
-      id: 'state-1',
-      userId: 'user-1',
-      organizationId: 'org-1',
-      lastSeenNoticesAt,
-      createdAt: new Date('2026-03-01T10:00:00.000Z'),
-      updatedAt: new Date('2026-03-01T10:00:00.000Z'),
-    } as NoticeReadState);
-    jest.spyOn(noticeRepository, 'findOne').mockResolvedValue({
-      id: 'notice-2',
-    } as Notice);
+    const querySpy = jest.spyOn(noticeReadStateRepository, 'query').mockResolvedValue([
+      {
+        hasUnread: 'true',
+        lastSeenNoticesAt: '2026-03-01T10:00:00.000Z',
+      },
+    ]);
 
     const result = await service.getUnreadCount('user-1', 'org-1');
 
     expect(result.hasUnread).toBe(true);
-    expect(result.lastSeenNoticesAt).toBe(lastSeenNoticesAt.toISOString());
-    expect(noticeRepository.findOne).toHaveBeenCalledWith({
-      where: expect.objectContaining({ organizationId: 'org-1' }),
-      order: { createdAt: 'DESC' },
-      select: ['id'],
-    });
+    expect(result.lastSeenNoticesAt).toBe('2026-03-01T10:00:00.000Z');
+    expect(querySpy).toHaveBeenCalledWith(expect.any(String), ['user-1', 'org-1']);
   });
 
   it('returns hasUnread=false when there are no notices newer than lastSeenNoticesAt', async () => {
-    const lastSeenNoticesAt = new Date('2026-03-15T05:00:00.000Z');
-
-    jest.spyOn(noticeReadStateRepository, 'findOne').mockResolvedValue({
-      id: 'state-1',
-      userId: 'user-1',
-      organizationId: 'org-1',
-      lastSeenNoticesAt,
-      createdAt: new Date('2026-03-01T10:00:00.000Z'),
-      updatedAt: new Date('2026-03-15T05:00:00.000Z'),
-    } as NoticeReadState);
-    jest.spyOn(noticeRepository, 'findOne').mockResolvedValue(null);
+    jest.spyOn(noticeReadStateRepository, 'query').mockResolvedValue([
+      {
+        hasUnread: false,
+        lastSeenNoticesAt: '2026-03-15T05:00:00.000Z',
+      },
+    ]);
 
     const result = await service.getUnreadCount('user-1', 'org-1');
 
     expect(result.hasUnread).toBe(false);
-    expect(result.lastSeenNoticesAt).toBe(lastSeenNoticesAt.toISOString());
+    expect(result.lastSeenNoticesAt).toBe('2026-03-15T05:00:00.000Z');
+  });
+
+  it('preserves microsecond read-state boundary by relying on SQL comparison', async () => {
+    jest.spyOn(noticeReadStateRepository, 'query').mockResolvedValue([
+      {
+        hasUnread: false,
+        lastSeenNoticesAt: '2026-03-15T05:00:00.123457Z',
+      },
+    ]);
+
+    const result = await service.getUnreadCount('user-1', 'org-1');
+
+    expect(result.hasUnread).toBe(false);
+    expect(result.lastSeenNoticesAt).toBe('2026-03-15T05:00:00.123Z');
   });
 
   it('creates read state when marking seen for first time', async () => {

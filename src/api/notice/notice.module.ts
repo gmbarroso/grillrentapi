@@ -5,9 +5,10 @@ import { NoticeController } from './controllers/notice.controller';
 import { Notice } from './entities/notice.entity';
 import { NoticeReadState } from './entities/notice-read-state.entity';
 import { UserModule } from '../user/user.module';
+import { WhatsappSettingsModule } from '../whatsapp-settings/whatsapp-settings.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Notice, NoticeReadState]), UserModule],
+  imports: [TypeOrmModule.forFeature([Notice, NoticeReadState]), UserModule, WhatsappSettingsModule],
   controllers: [NoticeController],
   providers: [NoticeService],
   exports: [NoticeService],
