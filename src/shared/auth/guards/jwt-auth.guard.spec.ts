@@ -2,7 +2,7 @@ import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@ne
 import { JwtAuthGuard } from './jwt-auth.guard';
 
 describe('API JwtAuthGuard', () => {
-  const API_PROTECTED_PATHS = ['/users/profile', '/users', '/resources', '/bookings', '/notices'];
+  const API_PROTECTED_PATHS = ['/users/profile', '/users', '/resources', '/bookings', '/notices', '/messages'];
   const token = 'phase6-token';
   const revokedTokenRepository = {
     findOne: jest.fn(),

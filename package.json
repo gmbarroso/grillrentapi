@@ -37,6 +37,7 @@
     "class-validator": "^0.14.1",
     "joi": "^17.13.3",
     "nest-winston": "^1.10.2",
+    "nodemailer": "^6.10.1",
     "passport-jwt": "^4.0.1",
     "pg": "^8.13.3",
     "reflect-metadata": "^0.2.2",

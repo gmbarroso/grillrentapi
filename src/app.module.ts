@@ -9,6 +9,7 @@ import { NoticeModule } from './api/notice/notice.module';
 import { SecurityModule } from './shared/security/security.module';
 import { OrganizationModule } from './api/organization/organization.module';
 import { WhatsappSettingsModule } from './api/whatsapp-settings/whatsapp-settings.module';
+import { MessageModule } from './api/message/message.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { WhatsappSettingsModule } from './api/whatsapp-settings/whatsapp-setting
     ResourceModule,
     BookingModule,
     NoticeModule,
+    MessageModule,
     WhatsappSettingsModule,
     OrganizationModule,
     SecurityModule,
