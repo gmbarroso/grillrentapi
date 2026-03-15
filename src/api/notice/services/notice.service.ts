@@ -88,30 +88,33 @@ export class NoticeService {
   async getUnreadCount(
     userId: string,
     organizationId: string,
-  ): Promise<{ unreadCount: number; lastSeenNoticesAt: string | null }> {
+  ): Promise<{ hasUnread: boolean; lastSeenNoticesAt: string | null }> {
     const readState = await this.noticeReadStateRepository.findOne({
       where: { userId, organizationId },
     });
 
     const lastSeenNoticesAt = readState?.lastSeenNoticesAt ?? null;
-    const unreadCount = await this.noticeRepository.count({
+    const newestUnreadNotice = await this.noticeRepository.findOne({
       where: {
         organizationId,
         ...(lastSeenNoticesAt ? { createdAt: MoreThan(lastSeenNoticesAt) } : {}),
       },
+      order: { createdAt: 'DESC' },
+      select: ['id'],
     });
+    const hasUnread = Boolean(newestUnreadNotice);
 
     this.logger.log(
       JSON.stringify({
         event: 'notice_unread_count_fetched',
         organizationId,
-        unreadCount,
+        hasUnread,
         hasReadState: Boolean(readState),
       }),
     );
 
     return {
-      unreadCount,
+      hasUnread,
       lastSeenNoticesAt: lastSeenNoticesAt ? lastSeenNoticesAt.toISOString() : null,
     };
   }

@@ -41,7 +41,7 @@ export class NoticeController {
 
   @UseGuards(JwtAuthGuard)
   @Get('unread-count')
-  async getUnreadCount(@Req() req: AuthenticatedRequest): Promise<{ unreadCount: number; lastSeenNoticesAt: string | null }> {
+  async getUnreadCount(@Req() req: AuthenticatedRequest): Promise<{ hasUnread: boolean; lastSeenNoticesAt: string | null }> {
     return this.noticeService.getUnreadCount(req.user.id, req.user.organizationId);
   }
 
