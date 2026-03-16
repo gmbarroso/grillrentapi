@@ -47,7 +47,7 @@ export class MessageService {
       status: 'unread',
       senderUserId: sender.id,
       senderName: sender.name,
-      senderEmail: sender.email,
+      senderEmail: sender.email ?? '',
       senderApartment: sender.apartment || null,
       senderBlock: sender.block ?? null,
       organizationId,

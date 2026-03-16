@@ -1,5 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, Unique } from 'typeorm';
-import { IsEmail, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { Entity, PrimaryGeneratedColumn, Column, Index, Unique } from 'typeorm';
+import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export enum UserRole {
   ADMIN = 'admin',
@@ -19,10 +19,11 @@ export class User {
   @Matches(/^[a-zA-Z\s]*$/, { message: 'Name can only contain letters and spaces' })
   name!: string;
 
-  @Column()
+  @Column({ nullable: true })
+  @IsOptional()
   @IsEmail()
   @MaxLength(100)
-  email!: string;
+  email?: string | null;
 
   @Column()
   @MinLength(8)
@@ -45,4 +46,20 @@ export class User {
 
   @Column({ type: 'uuid', nullable: true })
   organizationId?: string;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  emailVerifiedAt?: Date | null;
+
+  @Column({ type: 'boolean', default: false })
+  mustChangePassword?: boolean;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  pendingEmail?: string | null;
+
+  @Index('IDX_user_emailVerificationTokenHash')
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  emailVerificationTokenHash?: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  emailVerificationExpiresAt?: Date | null;
 }

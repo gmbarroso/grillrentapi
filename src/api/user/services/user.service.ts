@@ -45,6 +45,9 @@ export class UserService {
     if (updateUserDto.password) {
       updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
     }
+    if (updateUserDto.email !== undefined) {
+      updateUserDto.email = updateUserDto.email?.trim().toLowerCase() || null;
+    }
 
     Object.assign(user, updateUserDto);
     const updatedUser = await this.userRepository.save(user);
@@ -86,6 +89,9 @@ export class UserService {
 
     if (updateUserDto.password) {
       updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
+    }
+    if (updateUserDto.email !== undefined) {
+      updateUserDto.email = updateUserDto.email?.trim().toLowerCase() || null;
     }
 
     Object.assign(user, updateUserDto);
