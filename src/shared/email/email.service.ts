@@ -11,6 +11,14 @@ export interface SendEmailInput {
   html?: string;
   replyTo?: string;
   from?: string;
+  smtp?: {
+    host: string;
+    port: number;
+    secure: boolean;
+    user: string;
+    password: string;
+    from: string;
+  };
 }
 
 export interface SendEmailResult {
@@ -26,6 +34,10 @@ export class EmailService {
   constructor(private readonly configService: ConfigService) {}
 
   async send(input: SendEmailInput): Promise<SendEmailResult> {
+    if (input.smtp) {
+      return this.sendViaProvidedSmtp(input, input.smtp);
+    }
+
     const provider = (this.configService.get<string>('EMAIL_PROVIDER') || 'gmail_smtp').trim().toLowerCase();
 
     if (!input.to.length) {
@@ -90,6 +102,61 @@ export class EmailService {
 
       const result = await transporter.sendMail({
         from,
+        to: input.to.join(', '),
+        subject: input.subject,
+        text: input.text,
+        html: input.html,
+        replyTo: input.replyTo,
+      });
+
+      return {
+        status: 'sent',
+        providerMessageId: result.messageId || null,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown email provider error';
+      this.logger.error(`SMTP email send failed: ${message}`);
+      return {
+        status: 'failed',
+        providerMessageId: null,
+        errorMessage: this.trimError(message),
+      };
+    }
+  }
+
+  private async sendViaProvidedSmtp(
+    input: SendEmailInput,
+    smtp: {
+      host: string;
+      port: number;
+      secure: boolean;
+      user: string;
+      password: string;
+      from: string;
+    },
+  ): Promise<SendEmailResult> {
+    if (!smtp.user || !smtp.password || !smtp.from || !smtp.host || !smtp.port) {
+      return {
+        status: 'skipped',
+        providerMessageId: null,
+        errorMessage: 'Organization SMTP configuration is incomplete',
+      };
+    }
+
+    try {
+      const transporter = nodemailer.createTransport({
+        host: smtp.host,
+        port: smtp.port,
+        secure: smtp.secure,
+        auth: {
+          user: smtp.user,
+          pass: smtp.password,
+        },
+      });
+
+      const result = await transporter.sendMail({
+        from: input.from?.trim() || smtp.from,
         to: input.to.join(', '),
         subject: input.subject,
         text: input.text,

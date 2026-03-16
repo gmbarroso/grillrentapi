@@ -220,10 +220,25 @@ export class MessageService {
     providerMessageId: string | null;
     errorMessage: string | null;
   }> {
+    const config = await this.contactEmailSettingsService.resolveDeliveryConfig(message.organizationId!, message.senderEmail);
+    if (!config.shouldSend) {
+      const reason = config.validationErrors.length
+        ? `${config.reason}: ${config.validationErrors.join('; ')}`
+        : config.reason;
+      return {
+        status: 'skipped',
+        providerMessageId: null,
+        errorMessage: this.trimError(reason),
+      };
+    }
+
     const emailResult = await this.emailService.send({
       to: [message.senderEmail],
       subject: `[Resposta] ${message.subject}`,
       text: this.composeResidentReplyEmail(message, reply),
+      from: config.from || undefined,
+      replyTo: config.replyTo || undefined,
+      smtp: config.smtp,
     });
 
     return {
@@ -262,6 +277,7 @@ export class MessageService {
         subject: `[Contato] ${this.categoryLabel(message.category)} - ${message.subject}`,
         replyTo: config.replyTo || undefined,
         text: this.composeAdminMessageEmail(message),
+        smtp: config.smtp,
       });
 
       return {
