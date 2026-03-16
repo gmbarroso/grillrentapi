@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Logger, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UpdateUserDto } from '../dto/update-user.dto';
@@ -71,5 +71,35 @@ export class UserService {
     await this.userRepository.remove(user);
     this.logger.log(`User removed successfully: ${userId}`);
     return { message: 'User removed successfully' };
+  }
+
+  async updateUserById(userId: string, updateUserDto: UpdateUserDto, currentUser: User) {
+    this.logger.log(`Updating user ID: ${userId} by admin ID: ${currentUser.id}`);
+    const user = await this.userRepository.findOne({
+      where: { id: userId, organizationId: currentUser.organizationId },
+    });
+
+    if (!user) {
+      this.logger.warn(`User not found: ${userId}`);
+      throw new NotFoundException('User not found');
+    }
+
+    if (updateUserDto.password) {
+      updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
+    }
+
+    Object.assign(user, updateUserDto);
+
+    try {
+      const updatedUser = await this.userRepository.save(user);
+      this.logger.log(`User updated successfully: ${userId}`);
+      return { message: 'User updated successfully', user: updatedUser };
+    } catch (error) {
+      this.logger.error(`Error updating user ${userId}: ${error.message}`);
+      if (error?.code === '23505') {
+        throw new ConflictException('User already exists');
+      }
+      throw error;
+    }
   }
 }

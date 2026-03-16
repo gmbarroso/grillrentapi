@@ -211,7 +211,9 @@ export class WhatsappSettingsService {
       throw new NotFoundException('WhatsApp integration is not configured');
     }
 
-    const endpoint = `${credentials.baseUrl.replace(/\/+$/, '')}/group/fetchAllGroups/${encodeURIComponent(credentials.instanceName)}`;
+    const endpoint = `${
+      credentials.baseUrl.replace(/\/+$/, '')
+    }/group/fetchAllGroups/${encodeURIComponent(credentials.instanceName)}?getParticipants=false`;
     const response = await fetch(endpoint, {
       method: 'GET',
       headers: {

@@ -1,9 +1,10 @@
 import { Controller, Post, Body, Logger, Get, Put, Delete, Param, Req, UseGuards, ForbiddenException, UnauthorizedException, GoneException } from '@nestjs/common';
-import { UpdateUserDto } from '../dto/update-user.dto';
+import { UpdateUserDto, UpdateUserSchema } from '../dto/update-user.dto';
 import { UserService } from '../services/user.service';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { User } from '../../../shared/auth/decorators/user.decorator';
 import { User as UserEntity, UserRole } from '../entities/user.entity';
+import { JoiValidationPipe } from '../../../shared/pipes/joi-validation.pipe';
 
 @Controller('users')
 export class UserController {
@@ -35,7 +36,7 @@ export class UserController {
 
   @UseGuards(JwtAuthGuard)
   @Put('profile')
-  async updateProfile(@Req() req: any, @Body() updateData: Partial<UserEntity>) {
+  async updateProfile(@Req() req: any, @Body(new JoiValidationPipe(UpdateUserSchema)) updateData: UpdateUserDto) {
     const userId = req.user?.id;
 
     if (!userId) {
@@ -55,6 +56,21 @@ export class UserController {
   async getAllUsers(@User() user: UserEntity) {
     this.logger.log('Fetching all users');
     return this.userService.getAllUsers(user.organizationId as string);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put(':id')
+  async updateUser(
+    @User() currentUser: UserEntity,
+    @Param('id') id: string,
+    @Body(new JoiValidationPipe(UpdateUserSchema)) updateData: UpdateUserDto,
+  ) {
+    this.logger.log(`Attempting to update user ID: ${id} by user ID: ${currentUser.id} with role: ${currentUser.role}`);
+    if (currentUser.role !== UserRole.ADMIN) {
+      this.logger.warn(`User ID: ${currentUser.id} does not have permission to update users`);
+      throw new ForbiddenException('You do not have permission to update users');
+    }
+    return this.userService.updateUserById(id, updateData, currentUser);
   }
 
   @UseGuards(JwtAuthGuard)
