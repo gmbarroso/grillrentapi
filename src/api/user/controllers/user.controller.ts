@@ -5,6 +5,14 @@ import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { User } from '../../../shared/auth/decorators/user.decorator';
 import { User as UserEntity, UserRole } from '../entities/user.entity';
 import { JoiValidationPipe } from '../../../shared/pipes/joi-validation.pipe';
+import {
+  ChangeOnboardingPasswordDto,
+  ChangeOnboardingPasswordSchema,
+  SetOnboardingEmailDto,
+  SetOnboardingEmailSchema,
+  VerifyOnboardingEmailDto,
+  VerifyOnboardingEmailSchema,
+} from '../dto/onboarding.dto';
 
 @Controller('users')
 export class UserController {
@@ -43,12 +51,7 @@ export class UserController {
       throw new UnauthorizedException('User ID is missing');
     }
 
-    const updatedUser = await this.userService.updateProfile(userId, updateData, req.user);
-
-    return {
-      message: 'User profile updated successfully',
-      user: updatedUser,
-    };
+    return this.userService.updateProfile(userId, updateData, req.user);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -83,5 +86,32 @@ export class UserController {
     }
     this.logger.log(`Removing user ID: ${id}`);
     return this.userService.remove(id, currentUser.organizationId as string);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('onboarding/email')
+  async setOnboardingEmail(
+    @User() currentUser: UserEntity,
+    @Body(new JoiValidationPipe(SetOnboardingEmailSchema)) body: SetOnboardingEmailDto,
+  ) {
+    return this.userService.setOnboardingEmail(currentUser.id, currentUser.organizationId as string, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('onboarding/verify')
+  async verifyOnboardingEmail(
+    @User() currentUser: UserEntity,
+    @Body(new JoiValidationPipe(VerifyOnboardingEmailSchema)) body: VerifyOnboardingEmailDto,
+  ) {
+    return this.userService.verifyOnboardingEmail(currentUser.id, currentUser.organizationId as string, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('onboarding/change-password')
+  async changeOnboardingPassword(
+    @User() currentUser: UserEntity,
+    @Body(new JoiValidationPipe(ChangeOnboardingPasswordSchema)) body: ChangeOnboardingPasswordDto,
+  ) {
+    return this.userService.changeOnboardingPassword(currentUser.id, currentUser.organizationId as string, body);
   }
 }

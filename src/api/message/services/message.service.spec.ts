@@ -4,9 +4,10 @@ import { Repository } from 'typeorm';
 import { MessageService } from './message.service';
 import { Message } from '../entities/message.entity';
 import { MessageReply } from '../entities/message-reply.entity';
-import { User } from '../../user/entities/user.entity';
+import { User, UserRole } from '../../user/entities/user.entity';
 import { EmailService } from '../../../shared/email/email.service';
 import { ContactEmailSettingsService } from './contact-email-settings.service';
+import { ForbiddenException } from '@nestjs/common';
 
 describe('MessageService', () => {
   let service: MessageService;
@@ -67,6 +68,9 @@ describe('MessageService', () => {
       apartment: '101',
       block: 1,
       organizationId: 'org-1',
+      role: UserRole.RESIDENT,
+      emailVerifiedAt: new Date('2026-01-01T00:00:00.000Z'),
+      mustChangePassword: false,
     } as User);
     jest.spyOn(messageRepository, 'create').mockReturnValue(persisted);
     jest.spyOn(messageRepository, 'save').mockResolvedValue(persisted);
@@ -118,6 +122,9 @@ describe('MessageService', () => {
       name: 'Morador',
       email: 'morador@condo.com',
       organizationId: 'org-1',
+      role: UserRole.RESIDENT,
+      emailVerifiedAt: new Date('2026-01-01T00:00:00.000Z'),
+      mustChangePassword: false,
     } as User);
     jest.spyOn(messageRepository, 'create').mockReturnValue(persisted);
     jest.spyOn(messageRepository, 'save').mockResolvedValue(persisted);
@@ -145,5 +152,24 @@ describe('MessageService', () => {
         adminEmailLastError: 'settings repository unavailable',
       }),
     );
+  });
+
+  it('blocks contact creation for residents with pending onboarding', async () => {
+    jest.spyOn(userRepository, 'findOne').mockResolvedValue({
+      id: 'user-2',
+      name: 'Resident',
+      email: null,
+      role: UserRole.RESIDENT,
+      mustChangePassword: true,
+      organizationId: 'org-1',
+    } as User);
+
+    await expect(
+      service.createFromContact(
+        { subject: 'Assunto', category: 'question', content: 'Mensagem' },
+        'user-2',
+        'org-1',
+      ),
+    ).rejects.toThrow(ForbiddenException);
   });
 });

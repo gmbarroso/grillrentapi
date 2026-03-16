@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User, UserRole } from '../../user/entities/user.entity';
@@ -38,6 +38,9 @@ export class MessageService {
     const sender = await this.userRepository.findOne({ where: { id: userId, organizationId } });
     if (!sender) {
       throw new NotFoundException('Authenticated user not found');
+    }
+    if (sender.role === UserRole.RESIDENT && this.isOnboardingRequired(sender)) {
+      throw new ForbiddenException('Complete onboarding before accessing contact messaging');
     }
 
     const message = this.messageRepository.create({
@@ -344,5 +347,10 @@ export class MessageService {
 
   isAdmin(role: string): boolean {
     return role === UserRole.ADMIN;
+  }
+
+  private isOnboardingRequired(user: User): boolean {
+    const hasVerifiedActiveEmail = Boolean(user.email && user.emailVerifiedAt);
+    return !hasVerifiedActiveEmail || Boolean(user.mustChangePassword);
   }
 }

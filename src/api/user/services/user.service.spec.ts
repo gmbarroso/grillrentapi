@@ -3,7 +3,7 @@ import { UserService } from './user.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { User, UserRole } from '../entities/user.entity';
 import { Repository } from 'typeorm';
-import { UnauthorizedException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { UnauthorizedException, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { UpdateUserDto } from '../dto/update-user.dto';
 
 describe('UserService', () => {
@@ -31,7 +31,7 @@ describe('UserService', () => {
   });
 
   describe('getProfile', () => {
-    it('should get user profile', async () => {
+    it('should get user profile without sensitive fields', async () => {
       const user = {
         id: '1',
         name: 'testuser',
@@ -40,15 +40,24 @@ describe('UserService', () => {
         apartment: '101',
         block: 1,
         role: UserRole.RESIDENT,
+        mustChangePassword: false,
+        emailVerifiedAt: new Date(),
       };
       jest.spyOn(repository, 'findOne').mockResolvedValue(user as any);
 
-      expect(await service.getProfile('1', '9dd02335-74fa-487b-99f3-f3e6f9fba2af')).toEqual({ message: 'User profile retrieved successfully', user });
+      const result = await service.getProfile('1', '9dd02335-74fa-487b-99f3-f3e6f9fba2af');
+      expect(result.message).toBe('User profile retrieved successfully');
+      expect(result.user).not.toHaveProperty('password');
+      expect(result.onboarding).toEqual(
+        expect.objectContaining({
+          onboardingRequired: false,
+          isOnboardingComplete: true,
+        }),
+      );
     });
 
     it('should throw an UnauthorizedException if user is not found', async () => {
       jest.spyOn(repository, 'findOne').mockResolvedValue(null);
-
       await expect(service.getProfile('1', '9dd02335-74fa-487b-99f3-f3e6f9fba2af')).rejects.toThrow(UnauthorizedException);
     });
   });
@@ -68,12 +77,15 @@ describe('UserService', () => {
         block: 1,
         role: UserRole.RESIDENT,
         organizationId: '9dd02335-74fa-487b-99f3-f3e6f9fba2af',
+        mustChangePassword: true,
       };
-      const updatedUser = { ...user, ...updateUserDto };
+      const updatedUser = { ...user, pendingEmail: 'newemail@example.com' };
       jest.spyOn(repository, 'findOne').mockResolvedValue(user as any);
       jest.spyOn(repository, 'save').mockResolvedValue(updatedUser as any);
 
-      expect(await service.updateProfile('1', updateUserDto, user)).toEqual({ message: 'User profile updated successfully', user: updatedUser });
+      const result = await service.updateProfile('1', updateUserDto, user);
+      expect(result.message).toBe('User profile updated successfully');
+      expect(result.user).not.toHaveProperty('password');
     });
 
     it('should throw an UnauthorizedException if user is not found', async () => {
@@ -90,6 +102,7 @@ describe('UserService', () => {
         block: 1,
         role: UserRole.RESIDENT,
         organizationId: '9dd02335-74fa-487b-99f3-f3e6f9fba2af',
+        mustChangePassword: true,
       };
       jest.spyOn(repository, 'findOne').mockResolvedValue(null);
 
@@ -110,6 +123,7 @@ describe('UserService', () => {
         block: 1,
         role: UserRole.RESIDENT,
         organizationId: '9dd02335-74fa-487b-99f3-f3e6f9fba2af',
+        mustChangePassword: true,
       };
       jest.spyOn(repository, 'findOne').mockResolvedValue(user as any);
 
@@ -118,7 +132,7 @@ describe('UserService', () => {
   });
 
   describe('getAllUsers', () => {
-    it('should get all users', async () => {
+    it('should get all users without sensitive fields', async () => {
       const users = [{
         id: '1',
         name: 'testuser',
@@ -127,10 +141,14 @@ describe('UserService', () => {
         apartment: '101',
         block: 1,
         role: UserRole.RESIDENT,
+        mustChangePassword: false,
       }];
       jest.spyOn(repository, 'find').mockResolvedValue(users as any);
 
-      expect(await service.getAllUsers('9dd02335-74fa-487b-99f3-f3e6f9fba2af')).toEqual({ message: 'All users retrieved successfully', users });
+      const result = await service.getAllUsers('9dd02335-74fa-487b-99f3-f3e6f9fba2af');
+      expect(result.message).toBe('All users retrieved successfully');
+      expect(result.users).toHaveLength(1);
+      expect(result.users[0]).not.toHaveProperty('password');
     });
   });
 
@@ -153,8 +171,26 @@ describe('UserService', () => {
 
     it('should throw a NotFoundException if user is not found', async () => {
       jest.spyOn(repository, 'findOne').mockResolvedValue(null);
-
       await expect(service.remove('1', '9dd02335-74fa-487b-99f3-f3e6f9fba2af')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('changeOnboardingPassword', () => {
+    it('should reject when current password is wrong', async () => {
+      const user = {
+        id: '1',
+        name: 'Resident',
+        role: UserRole.RESIDENT,
+        organizationId: 'org-1',
+        password: '$2b$10$uAifFQDU8YXQxV0zt3ZqRO.X5v4a5vNQfTU7QY8MdkhN.9jI6cN9i', // "Password1"
+        email: null,
+        mustChangePassword: true,
+      } as User;
+      jest.spyOn(repository, 'findOne').mockResolvedValue(user);
+
+      await expect(
+        service.changeOnboardingPassword('1', 'org-1', { currentPassword: 'Wrong123', newPassword: 'Newpass123' }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });
