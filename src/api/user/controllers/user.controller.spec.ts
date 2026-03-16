@@ -4,7 +4,7 @@ import { UserService } from '../services/user.service';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { User, UserRole } from '../entities/user.entity';
-import { ForbiddenException, GoneException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, GoneException } from '@nestjs/common';
 
 describe('UserController', () => {
   let controller: UserController;
@@ -102,6 +102,24 @@ describe('UserController', () => {
       const req = { user } as any;
 
       expect(await controller.updateProfile(req, updateUserDto)).toEqual(result as any);
+    });
+
+    it('should reject password change via profile endpoint', async () => {
+      const user: User = {
+        id: '1',
+        name: 'testuser',
+        password: 'hashedpassword',
+        email: 'testuser@example.com',
+        apartment: '101',
+        block: 1,
+        role: UserRole.RESIDENT,
+      };
+      const req = { user } as any;
+      await expect(
+        controller.updateProfile(req, {
+          password: 'Newpass123',
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

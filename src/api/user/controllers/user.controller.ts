@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Logger, Get, Put, Delete, Param, Req, UseGuards, ForbiddenException, UnauthorizedException, GoneException } from '@nestjs/common';
+import { BadRequestException, Controller, Post, Body, Logger, Get, Put, Delete, Param, Req, UseGuards, ForbiddenException, UnauthorizedException, GoneException } from '@nestjs/common';
 import { UpdateUserDto, UpdateUserSchema } from '../dto/update-user.dto';
 import { UserService } from '../services/user.service';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
@@ -49,6 +49,9 @@ export class UserController {
 
     if (!userId) {
       throw new UnauthorizedException('User ID is missing');
+    }
+    if (updateData.password !== undefined) {
+      throw new BadRequestException('Use onboarding password endpoint to change password');
     }
 
     return this.userService.updateProfile(userId, updateData, req.user);
