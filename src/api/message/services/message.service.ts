@@ -90,24 +90,57 @@ export class MessageService {
     const page = Math.max(1, Number(query.page || 1));
     const limit = Math.min(100, Math.max(1, Number(query.limit || 20)));
 
-    const qb = this.messageRepository
+    const baseQb = this.messageRepository
       .createQueryBuilder('message')
-      .leftJoinAndSelect('message.replies', 'reply')
-      .where('message.organizationId = :organizationId', { organizationId })
-      .orderBy('message.createdAt', 'DESC')
-      .addOrderBy('reply.createdAt', 'ASC');
+      .where('message.organizationId = :organizationId', { organizationId });
 
     if (query.category) {
-      qb.andWhere('message.category = :category', { category: query.category });
+      baseQb.andWhere('message.category = :category', { category: query.category });
     }
 
     if (query.status) {
-      qb.andWhere('message.status = :status', { status: query.status });
+      baseQb.andWhere('message.status = :status', { status: query.status });
     }
 
-    qb.skip((page - 1) * limit).take(limit);
+    const total = await baseQb.getCount();
 
-    const [data, total] = await qb.getManyAndCount();
+    const idsQb = this.messageRepository
+      .createQueryBuilder('message')
+      .select('message.id', 'id')
+      .where('message.organizationId = :organizationId', { organizationId });
+
+    if (query.category) {
+      idsQb.andWhere('message.category = :category', { category: query.category });
+    }
+
+    if (query.status) {
+      idsQb.andWhere('message.status = :status', { status: query.status });
+    }
+
+    idsQb
+      .orderBy('message.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const rawIds = await idsQb.getRawMany<{ id: string }>();
+    const ids = rawIds.map((row) => row.id);
+
+    if (ids.length === 0) {
+      return {
+        data: [],
+        total,
+        page,
+        lastPage: Math.max(1, Math.ceil(total / limit)),
+      };
+    }
+
+    const data = await this.messageRepository
+      .createQueryBuilder('message')
+      .leftJoinAndSelect('message.replies', 'reply')
+      .where('message.id IN (:...ids)', { ids })
+      .orderBy('message.createdAt', 'DESC')
+      .addOrderBy('reply.createdAt', 'ASC')
+      .getMany();
 
     return {
       data,

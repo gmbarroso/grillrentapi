@@ -5,12 +5,14 @@ import { Repository } from 'typeorm';
 import { NoticeService } from './notice.service';
 import { Notice } from '../entities/notice.entity';
 import { NoticeReadState } from '../entities/notice-read-state.entity';
+import { WhatsappSettingsService } from '../../whatsapp-settings/services/whatsapp-settings.service';
 
 describe('NoticeService', () => {
   let service: NoticeService;
   let noticeRepository: jest.Mocked<Repository<Notice>>;
   let noticeReadStateRepository: jest.Mocked<Repository<NoticeReadState>>;
   let configService: jest.Mocked<ConfigService>;
+  let whatsappSettingsService: jest.Mocked<WhatsappSettingsService>;
 
   const defaultEnv: Record<string, string> = {
     WHATSAPP_EVOLUTION_BASE_URL: 'https://evolution.example.com',
@@ -34,6 +36,13 @@ describe('NoticeService', () => {
             get: jest.fn((key: string) => defaultEnv[key]),
           },
         },
+        {
+          provide: WhatsappSettingsService,
+          useValue: {
+            isAutoSendNoticesEnabled: jest.fn().mockResolvedValue(false),
+            getDeliveryConfigForFeature: jest.fn().mockResolvedValue(null),
+          },
+        },
       ],
     }).compile();
 
@@ -41,6 +50,7 @@ describe('NoticeService', () => {
     noticeRepository = module.get(getRepositoryToken(Notice));
     noticeReadStateRepository = module.get(getRepositoryToken(NoticeReadState));
     configService = module.get(ConfigService);
+    whatsappSettingsService = module.get(WhatsappSettingsService);
   });
 
   afterEach(() => {
@@ -292,5 +302,100 @@ describe('NoticeService', () => {
     expect(global.fetch).not.toHaveBeenCalled();
     expect(result.whatsappDeliveryStatus).toBe('skipped');
     expect(result.whatsappLastError).toContain('not configured');
+  });
+
+  it('auto-sends notice when organization autoSendNotices is enabled even if DTO flag is false', async () => {
+    whatsappSettingsService.isAutoSendNoticesEnabled.mockResolvedValue(true);
+    whatsappSettingsService.getDeliveryConfigForFeature.mockResolvedValue({
+      baseUrl: 'https://db-config.example.com',
+      instanceName: 'db-instance',
+      apiKey: 'db-key',
+      groupJid: '120363111111111111@g.us',
+      autoSendNotices: true,
+    });
+
+    const createdNotice = {
+      id: 'notice-5',
+      title: 'Titulo',
+      content: 'Mensagem',
+      sendViaWhatsapp: true,
+      organizationId: 'org-1',
+      whatsappDeliveryStatus: 'pending',
+      whatsappAttemptCount: 0,
+    } as Notice;
+
+    jest.spyOn(noticeRepository, 'create').mockReturnValue(createdNotice);
+    jest
+      .spyOn(noticeRepository, 'save')
+      .mockResolvedValueOnce(createdNotice)
+      .mockImplementation(async (value: Notice) => value as Notice);
+    jest.spyOn(noticeRepository, 'findOne').mockResolvedValue(createdNotice);
+
+    (global.fetch as jest.Mock | undefined) = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ key: { id: 'provider-auto' } }),
+    });
+
+    const result = await service.create(
+      {
+        title: 'Titulo',
+        content: 'Mensagem',
+        sendViaWhatsapp: false,
+      },
+      'org-1',
+    );
+
+    expect(result.whatsappDeliveryStatus).toBe('sent');
+    expect(global.fetch).toHaveBeenCalled();
+  });
+
+  it('prefers DB delivery configuration over legacy env fallback when both are available', async () => {
+    whatsappSettingsService.getDeliveryConfigForFeature.mockResolvedValue({
+      baseUrl: 'https://db-config.example.com',
+      instanceName: 'db-instance',
+      apiKey: 'db-key',
+      groupJid: '120363222222222222@g.us',
+      autoSendNotices: false,
+    });
+
+    const createdNotice = {
+      id: 'notice-6',
+      title: 'Titulo',
+      content: 'Mensagem',
+      sendViaWhatsapp: true,
+      organizationId: 'org-1',
+      whatsappDeliveryStatus: 'pending',
+      whatsappAttemptCount: 0,
+    } as Notice;
+
+    jest.spyOn(noticeRepository, 'create').mockReturnValue(createdNotice);
+    jest
+      .spyOn(noticeRepository, 'save')
+      .mockResolvedValueOnce(createdNotice)
+      .mockImplementation(async (value: Notice) => value as Notice);
+    jest.spyOn(noticeRepository, 'findOne').mockResolvedValue(createdNotice);
+
+    (global.fetch as jest.Mock | undefined) = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ key: { id: 'provider-db-priority' } }),
+    });
+
+    await service.create(
+      {
+        title: 'Titulo',
+        content: 'Mensagem',
+        sendViaWhatsapp: true,
+      },
+      'org-1',
+    );
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('https://db-config.example.com/message/sendText/db-instance'),
+      expect.objectContaining({
+        body: expect.stringContaining('120363222222222222@g.us'),
+      }),
+    );
   });
 });

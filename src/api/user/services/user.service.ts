@@ -427,8 +427,7 @@ export class UserService {
   }
 
   private buildTokenPreviewResponse(token: string): { verificationTokenPreview?: string } {
-    const nodeEnv = (process.env.NODE_ENV || '').toLowerCase();
-    if (nodeEnv === 'production') {
+    if (this.isProductionLike()) {
       return {};
     }
     return { verificationTokenPreview: token };

@@ -35,6 +35,7 @@ interface WebhookHandleResult {
 @Injectable()
 export class WhatsappWebhookService {
   private readonly logger = new Logger(WhatsappWebhookService.name);
+  private static readonly DEFAULT_PROVIDER_TIMEOUT_MS = 8000;
 
   constructor(
     @InjectRepository(Notice)
@@ -187,6 +188,9 @@ export class WhatsappWebhookService {
     const endpoint = `${
       params.integration.baseUrl.replace(/\/+$/, '')
     }/group/fetchAllGroups/${encodeURIComponent(params.integration.instanceName)}?getParticipants=true`;
+    const timeoutMs = this.readProviderTimeoutMs();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(endpoint, {
@@ -194,6 +198,7 @@ export class WhatsappWebhookService {
         headers: {
           apikey: params.integration.apiKey,
         },
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -231,10 +236,13 @@ export class WhatsappWebhookService {
         JSON.stringify({
           event: 'notice_whatsapp_inbound_admin_check_exception',
           groupJid: params.groupJid,
+          timedOut: (error as Error).name === 'AbortError',
           message: (error as Error).message,
         }),
       );
       return false;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -555,5 +563,13 @@ export class WhatsappWebhookService {
     } catch {
       return null;
     }
+  }
+
+  private readProviderTimeoutMs(): number {
+    const raw = this.configService.get<string>('WHATSAPP_PROVIDER_TIMEOUT_MS');
+    const parsed = Number.parseInt(raw || '', 10);
+    return Number.isFinite(parsed) && parsed > 0
+      ? parsed
+      : WhatsappWebhookService.DEFAULT_PROVIDER_TIMEOUT_MS;
   }
 }

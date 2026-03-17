@@ -113,12 +113,20 @@ export class NoticeService {
           (
             SELECT "lastSeenNoticesAt"
             FROM "read_state"
-          ) AS "lastSeenNoticesAt"
+          ) AS "lastSeenNoticesAt",
+          (
+            SELECT EXISTS (SELECT 1 FROM "read_state")
+          ) AS "hasReadStateRow"
       `,
       [userId, organizationId],
-    )) as Array<{ hasUnread: boolean | 'true' | 'false'; lastSeenNoticesAt: string | Date | null }>;
+    )) as Array<{
+      hasUnread: boolean | 'true' | 'false';
+      lastSeenNoticesAt: string | Date | null;
+      hasReadStateRow?: boolean | 'true' | 'false';
+    }>;
 
     const hasUnread = row?.hasUnread === true || row?.hasUnread === 'true';
+    const hasReadStateRow = row?.hasReadStateRow === true || row?.hasReadStateRow === 'true';
     const lastSeenValue = row?.lastSeenNoticesAt ?? null;
     const lastSeenNoticesAt = lastSeenValue ? new Date(lastSeenValue).toISOString() : null;
 
@@ -127,7 +135,7 @@ export class NoticeService {
         event: 'notice_unread_count_fetched',
         organizationId,
         hasUnread,
-        hasReadState: Boolean(lastSeenNoticesAt),
+        hasReadStateRow,
       }),
     );
 

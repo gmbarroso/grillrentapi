@@ -27,6 +27,7 @@ interface EvolutionGroupPayload {
 @Injectable()
 export class WhatsappSettingsService {
   private readonly logger = new Logger(WhatsappSettingsService.name);
+  private static readonly DEFAULT_PROVIDER_TIMEOUT_MS = 8000;
 
   constructor(
     @InjectRepository(OrganizationWhatsappIntegration)
@@ -142,12 +143,23 @@ export class WhatsappSettingsService {
     }
 
     const endpoint = `${resolved.baseUrl.replace(/\/+$/, '')}/instance/fetchInstances`;
-    const response = await fetch(endpoint, {
-      method: 'GET',
-      headers: {
-        apikey: resolved.apiKey,
-      },
-    });
+    let response: Response;
+    try {
+      response = await this.fetchProviderWithTimeout(endpoint, {
+        method: 'GET',
+        headers: {
+          apikey: resolved.apiKey,
+        },
+      });
+    } catch (error) {
+      await this.integrationRepository.update(
+        { organizationId },
+        {
+          status: 'disconnected',
+        },
+      );
+      throw error;
+    }
 
     const status: WhatsappIntegrationStatus = response.ok ? 'connected' : 'disconnected';
 
@@ -214,12 +226,25 @@ export class WhatsappSettingsService {
     const endpoint = `${
       credentials.baseUrl.replace(/\/+$/, '')
     }/group/fetchAllGroups/${encodeURIComponent(credentials.instanceName)}?getParticipants=false`;
-    const response = await fetch(endpoint, {
-      method: 'GET',
-      headers: {
-        apikey: credentials.apiKey,
-      },
-    });
+    let response: Response;
+    try {
+      response = await this.fetchProviderWithTimeout(endpoint, {
+        method: 'GET',
+        headers: {
+          apikey: credentials.apiKey,
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'whatsapp_group_fetch_failed',
+          organizationId,
+          timedOut: error instanceof BadGatewayException && String(error.message).includes('timed out'),
+          message: (error as Error).message,
+        }),
+      );
+      throw error;
+    }
 
     if (!response.ok) {
       const bodyText = await this.readBodySafe(response);
@@ -355,6 +380,34 @@ export class WhatsappSettingsService {
     }
 
     return '';
+  }
+
+  private async fetchProviderWithTimeout(url: string, init: RequestInit): Promise<Response> {
+    const timeoutMs = this.readProviderTimeoutMs();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      return await fetch(url, {
+        ...init,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        throw new BadGatewayException(`WhatsApp provider request timed out after ${timeoutMs}ms`);
+      }
+      throw new BadGatewayException('Unable to reach WhatsApp provider');
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private readProviderTimeoutMs(): number {
+    const raw = this.configService.get<string>('WHATSAPP_PROVIDER_TIMEOUT_MS');
+    const parsed = Number.parseInt(raw || '', 10);
+    return Number.isFinite(parsed) && parsed > 0
+      ? parsed
+      : WhatsappSettingsService.DEFAULT_PROVIDER_TIMEOUT_MS;
   }
 
   private resolveLegacyGroupJid(organizationId: string): string | null {
