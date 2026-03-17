@@ -92,7 +92,7 @@ export class NoticeService {
   async getUnreadCount(
     userId: string,
     organizationId: string,
-  ): Promise<{ hasUnread: boolean; lastSeenNoticesAt: string | null }> {
+  ): Promise<{ unreadCount: number; hasUnread: boolean; lastSeenNoticesAt: string | null }> {
     const [row] = (await this.noticeReadStateRepository.query(
       `
         WITH "read_state" AS (
@@ -103,6 +103,7 @@ export class NoticeService {
           LIMIT 1
         )
         SELECT
+          COUNT(*)::int AS "unreadCount",
           EXISTS (
             SELECT 1
             FROM "notice" "n"
@@ -120,11 +121,14 @@ export class NoticeService {
       `,
       [userId, organizationId],
     )) as Array<{
+      unreadCount: number | string;
       hasUnread: boolean | 'true' | 'false';
       lastSeenNoticesAt: string | Date | null;
       hasReadStateRow?: boolean | 'true' | 'false';
     }>;
 
+    const unreadCountRaw = row?.unreadCount ?? 0;
+    const unreadCount = typeof unreadCountRaw === 'number' ? unreadCountRaw : Number.parseInt(unreadCountRaw, 10) || 0;
     const hasUnread = row?.hasUnread === true || row?.hasUnread === 'true';
     const hasReadStateRow = row?.hasReadStateRow === true || row?.hasReadStateRow === 'true';
     const lastSeenValue = row?.lastSeenNoticesAt ?? null;
@@ -134,12 +138,14 @@ export class NoticeService {
       JSON.stringify({
         event: 'notice_unread_count_fetched',
         organizationId,
+        unreadCount,
         hasUnread,
         hasReadStateRow,
       }),
     );
 
     return {
+      unreadCount,
       hasUnread,
       lastSeenNoticesAt,
     };

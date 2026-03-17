@@ -48,7 +48,7 @@ export class NoticeController {
   }> {
     const result = await this.noticeService.getUnreadCount(req.user.id, req.user.organizationId);
     return {
-      unreadCount: result.hasUnread ? 1 : 0,
+      unreadCount: result.unreadCount,
       hasUnread: result.hasUnread,
       lastSeenNoticesAt: result.lastSeenNoticesAt,
     };
