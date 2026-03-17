@@ -118,7 +118,9 @@ export class WhatsappSettingsService {
 
   async updateSettings(organizationId: string, data: UpdateWhatsappSettingsDto): Promise<WhatsappSettingsViewDto> {
     const existing = await this.integrationRepository.findOne({ where: { organizationId } });
-    const cleanApiKey = data.apiKey?.trim();
+    const hasApiKeyField = Object.prototype.hasOwnProperty.call(data, 'apiKey');
+    const normalizedApiKey = typeof data.apiKey === 'string' ? data.apiKey.trim() : '';
+    const resolvedApiKey = hasApiKeyField ? normalizedApiKey : existing?.apiKey ?? '';
 
     const integration = this.integrationRepository.create({
       id: existing?.id,
@@ -126,10 +128,10 @@ export class WhatsappSettingsService {
       provider: 'evolution',
       baseUrl: data.baseUrl.trim(),
       instanceName: data.instanceName.trim(),
-      apiKey: cleanApiKey ? cleanApiKey : existing?.apiKey ?? '',
+      apiKey: resolvedApiKey,
       whatsappNumber: data.whatsappNumber?.trim() || null,
       autoSendNotices: Boolean(data.autoSendNotices),
-      status: this.resolveStatus(cleanApiKey || existing?.apiKey),
+      status: this.resolveStatus(resolvedApiKey),
     });
 
     await this.integrationRepository.save(integration);

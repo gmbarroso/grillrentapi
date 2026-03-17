@@ -1,6 +1,5 @@
 import * as Joi from '@hapi/joi';
-
-const PASSWORD_POLICY_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])(?=\S+$).{8,100}$/;
+import { PASSWORD_POLICY_MESSAGE, PASSWORD_POLICY_REGEX } from '../../../shared/validation/password-policy';
 
 export class SetOnboardingEmailDto {
   email!: string;
@@ -29,7 +28,7 @@ export const ChangeOnboardingPasswordSchema = Joi.object({
     .pattern(PASSWORD_POLICY_REGEX)
     .required()
     .messages({
-      'string.pattern.base': 'Password must have at least 8 chars, one uppercase letter, one number, and one special character',
+      'string.pattern.base': PASSWORD_POLICY_MESSAGE,
     }),
 });
 
@@ -44,7 +43,7 @@ export const ChangePasswordSchema = Joi.object({
     .pattern(PASSWORD_POLICY_REGEX)
     .required()
     .messages({
-      'string.pattern.base': 'Password must have at least 8 chars, one uppercase letter, one number, and one special character',
+      'string.pattern.base': PASSWORD_POLICY_MESSAGE,
     }),
 });
 

@@ -39,7 +39,7 @@ describe('NoticeController', () => {
 
     await expect(
       controller.getUnreadCount({ user: { id: 'user-1', organizationId: 'org-1' } } as any),
-    ).resolves.toEqual({ hasUnread: true, lastSeenNoticesAt: null });
+    ).resolves.toEqual({ unreadCount: 1, hasUnread: true, lastSeenNoticesAt: null });
     expect(service.getUnreadCount).toHaveBeenCalledWith('user-1', 'org-1');
   });
 

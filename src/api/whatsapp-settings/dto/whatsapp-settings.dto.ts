@@ -3,7 +3,7 @@ import * as Joi from '@hapi/joi';
 export const UpdateWhatsappSettingsSchema = Joi.object({
   baseUrl: Joi.string().trim().uri({ scheme: ['http', 'https'] }).required(),
   instanceName: Joi.string().trim().max(120).required(),
-  apiKey: Joi.string().trim().max(500).allow('').optional(),
+  apiKey: Joi.string().trim().max(500).allow('', null).optional(),
   whatsappNumber: Joi.string().trim().max(40).allow('', null).optional(),
   autoSendNotices: Joi.boolean().optional(),
 });
@@ -22,7 +22,7 @@ export const UpsertWhatsappGroupBindingSchema = Joi.object({
 export class UpdateWhatsappSettingsDto {
   baseUrl!: string;
   instanceName!: string;
-  apiKey?: string;
+  apiKey?: string | null;
   whatsappNumber?: string | null;
   autoSendNotices?: boolean;
 }

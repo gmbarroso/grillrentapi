@@ -3,6 +3,7 @@ import { QueryFailedError } from 'typeorm';
 import { WhatsappWebhookService } from './whatsapp-webhook.service';
 
 describe('WhatsappWebhookService', () => {
+  const fetchMock = jest.fn();
   const noticeRepository = {
     create: jest.fn(),
     save: jest.fn(),
@@ -45,6 +46,7 @@ describe('WhatsappWebhookService', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    (global as any).fetch = fetchMock;
 
     service = new WhatsappWebhookService(
       noticeRepository as any,
@@ -57,6 +59,10 @@ describe('WhatsappWebhookService', () => {
     configService.get.mockReturnValue('webhook-secret-123');
     noticeRepository.create.mockImplementation((value) => value);
     inboundEventRepository.create.mockImplementation((value) => value);
+  });
+
+  afterAll(() => {
+    delete (global as any).fetch;
   });
 
   it('rejects webhook when secret is invalid', async () => {
@@ -129,5 +135,71 @@ describe('WhatsappWebhookService', () => {
     expect(result.status).toBe('created');
     expect(result.noticeId).toBe('notice-1');
     expect(noticeRepository.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses cached group participants and avoids repeated provider calls', async () => {
+    const queryBuilder = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getOne: jest.fn().mockResolvedValue({
+        organizationId: 'org-1',
+        integrationId: 'integration-1',
+        groupJid: '120363405906248196@g.us',
+      }),
+    };
+    groupBindingRepository.createQueryBuilder.mockReturnValue(queryBuilder);
+
+    inboundEventRepository.save
+      .mockResolvedValueOnce({ id: 'inbound-1', organizationId: 'org-1' })
+      .mockResolvedValueOnce({ id: 'inbound-1', organizationId: 'org-1', processedAsNotice: true, noticeId: 'notice-1' })
+      .mockResolvedValueOnce({ id: 'inbound-2', organizationId: 'org-1' })
+      .mockResolvedValueOnce({ id: 'inbound-2', organizationId: 'org-1', processedAsNotice: true, noticeId: 'notice-2' });
+
+    integrationRepository.findOne.mockResolvedValue({
+      id: 'integration-1',
+      baseUrl: 'https://evolution-api.example.com',
+      instanceName: 'grillrent-test',
+      apiKey: 'abc',
+      whatsappNumber: null,
+    });
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      text: async () =>
+        JSON.stringify([
+          {
+            id: '120363405906248196@g.us',
+            participants: [
+              { id: '5521999999999@s.whatsapp.net', admin: true },
+              { id: '5521888888888@s.whatsapp.net', admin: false },
+            ],
+          },
+        ]),
+    } as any);
+    noticeRepository.save
+      .mockResolvedValueOnce({ id: 'notice-1' })
+      .mockResolvedValueOnce({ id: 'notice-2' });
+
+    const payload2 = {
+      ...validPayload,
+      data: {
+        ...validPayload.data,
+        key: {
+          ...validPayload.data.key,
+          id: 'provider-msg-2',
+        },
+      },
+    };
+
+    await expect(service.handleEvolutionWebhook(validPayload, 'webhook-secret-123')).resolves.toMatchObject({
+      status: 'created',
+      noticeId: 'notice-1',
+    });
+    await expect(service.handleEvolutionWebhook(payload2, 'webhook-secret-123')).resolves.toMatchObject({
+      status: 'created',
+      noticeId: 'notice-2',
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -36,6 +36,9 @@ interface WebhookHandleResult {
 export class WhatsappWebhookService {
   private readonly logger = new Logger(WhatsappWebhookService.name);
   private static readonly DEFAULT_PROVIDER_TIMEOUT_MS = 8000;
+  private static readonly GROUP_ADMIN_CACHE_TTL_MS = 30_000;
+  private static readonly GROUP_ADMIN_CACHE_MAX_SIZE = 500;
+  private readonly groupAdminCache = new Map<string, { adminIds: Set<string>; expiresAt: number }>();
 
   constructor(
     @InjectRepository(Notice)
@@ -185,6 +188,14 @@ export class WhatsappWebhookService {
       return true;
     }
 
+    const now = Date.now();
+    const cacheKey = `${params.integration.id}:${this.normalizeJid(params.groupJid).toLowerCase()}`;
+    this.pruneGroupAdminCache(now);
+    const cachedEntry = this.groupAdminCache.get(cacheKey);
+    if (cachedEntry && cachedEntry.expiresAt > now) {
+      return cachedEntry.adminIds.has(senderId);
+    }
+
     const endpoint = `${
       params.integration.baseUrl.replace(/\/+$/, '')
     }/group/fetchAllGroups/${encodeURIComponent(params.integration.instanceName)}?getParticipants=true`;
@@ -222,15 +233,27 @@ export class WhatsappWebhookService {
       if (participants.length === 0) {
         return false;
       }
-
-      return participants.some((participant) => {
-        const participantId = this.normalizeActorId(this.extractParticipantJid(participant));
-        if (!participantId) {
-          return false;
+      const adminIds = new Set<string>();
+      for (const participant of participants) {
+        if (!this.isParticipantAdmin(participant)) {
+          continue;
         }
 
-        return participantId === senderId && this.isParticipantAdmin(participant);
-      });
+        const participantId = this.normalizeActorId(this.extractParticipantJid(participant));
+        if (participantId) {
+          adminIds.add(participantId);
+        }
+      }
+
+      if (adminIds.size > 0) {
+        this.groupAdminCache.set(cacheKey, {
+          adminIds,
+          expiresAt: now + WhatsappWebhookService.GROUP_ADMIN_CACHE_TTL_MS,
+        });
+        this.pruneGroupAdminCache(now);
+      }
+
+      return adminIds.has(senderId);
     } catch (error) {
       this.logger.warn(
         JSON.stringify({
@@ -240,9 +263,33 @@ export class WhatsappWebhookService {
           message: (error as Error).message,
         }),
       );
+      if (cachedEntry) {
+        return cachedEntry.adminIds.has(senderId);
+      }
       return false;
     } finally {
       clearTimeout(timeout);
+    }
+  }
+
+  private pruneGroupAdminCache(now: number): void {
+    for (const [key, entry] of this.groupAdminCache.entries()) {
+      if (entry.expiresAt <= now) {
+        this.groupAdminCache.delete(key);
+      }
+    }
+
+    if (this.groupAdminCache.size <= WhatsappWebhookService.GROUP_ADMIN_CACHE_MAX_SIZE) {
+      return;
+    }
+
+    const keys = this.groupAdminCache.keys();
+    while (this.groupAdminCache.size > WhatsappWebhookService.GROUP_ADMIN_CACHE_MAX_SIZE) {
+      const next = keys.next();
+      if (next.done) {
+        break;
+      }
+      this.groupAdminCache.delete(next.value);
     }
   }
 

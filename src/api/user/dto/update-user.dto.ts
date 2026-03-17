@@ -1,6 +1,5 @@
 import * as Joi from '@hapi/joi';
-
-const PASSWORD_POLICY_REGEX = /^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])(?=\S+$).{8,100}$/;
+import { PASSWORD_POLICY_MESSAGE, PASSWORD_POLICY_REGEX } from '../../../shared/validation/password-policy';
 
 export const UpdateUserSchema = Joi.object({
   name: Joi.string().optional(),
@@ -8,7 +7,7 @@ export const UpdateUserSchema = Joi.object({
     .pattern(PASSWORD_POLICY_REGEX)
     .optional()
     .messages({
-      'string.pattern.base': 'Password must have at least 8 chars, one uppercase letter, one number, and one special character',
+      'string.pattern.base': PASSWORD_POLICY_MESSAGE,
     }),
   email: Joi.string().trim().email().allow('', null).optional(),
   apartment: Joi.string().optional(),

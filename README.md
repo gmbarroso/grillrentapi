@@ -42,6 +42,9 @@ $ npm run test:cov
 - `POST /users/logout`: **deprecated/disabled** (use `grillrentbff_v2`).
 - `GET /users/profile`: Obtém o perfil do usuário autenticado.
 - `PUT /users/profile`: Atualiza o perfil do usuário autenticado.
+- `POST /users/onboarding/email`: Define email de onboarding.
+- `POST /users/onboarding/verify`: Verifica token de onboarding.
+- `POST /users/onboarding/change-password`: Troca senha temporária.
 - `GET /users`: Obtém todos os usuários.
 - `DELETE /users/:id`: Remove um usuário.
 
@@ -51,6 +54,26 @@ $ npm run test:cov
 - `GET /bookings/user/:userId`: Obtém reservas por usuário.
 - `DELETE /bookings/:id`: Remove uma reserva.
 - `GET /bookings/availability/:resourceId`: Verifica a disponibilidade de um recurso.
+
+### Avisos
+- `GET /notices/unread-count`: Estado de não lidos (`unreadCount`, `hasUnread`, `lastSeenNoticesAt`).
+- `POST /notices/mark-seen`: Marca avisos como vistos.
+
+### Mensagens
+- `POST /messages/contact`: Envia mensagem de contato.
+- `GET /messages/admin`: Inbox de mensagens para admins.
+- `GET /messages/unread-count`: Contador de não lidas.
+- `POST /messages/:id/mark-read`: Marca mensagem como lida.
+- `POST /messages/:id/replies`: Responde mensagem.
+
+### Configuração WhatsApp
+- `GET /whatsapp/settings`: Lê settings por organização.
+- `PUT /whatsapp/settings`: Atualiza settings (`apiKey: ""` limpa chave armazenada).
+- `POST /whatsapp/settings/test-connection`: Testa conexão.
+- `GET /whatsapp/settings/groups`: Lista grupos do provedor.
+- `GET /whatsapp/settings/bindings`: Lista vínculos por feature.
+- `PUT /whatsapp/settings/bindings/:feature`: Salva vínculo por feature.
+- `POST /webhooks/whatsapp/evolution`: Inbound webhook (secret obrigatório em `x-webhook-secret`).
 
 ## Requisitos Funcionais
 
