@@ -6,6 +6,14 @@ import { User } from '../../../shared/auth/decorators/user.decorator';
 import { User as UserEntity, UserRole } from '../entities/user.entity';
 import { JoiValidationPipe } from '../../../shared/pipes/joi-validation.pipe';
 import {
+  ForgotPasswordConfirmDto,
+  ForgotPasswordConfirmSchema,
+  ForgotPasswordRequestDto,
+  ForgotPasswordRequestSchema,
+} from '../dto/forgot-password.dto';
+import {
+  ChangePasswordDto,
+  ChangePasswordSchema,
   ChangeOnboardingPasswordDto,
   ChangeOnboardingPasswordSchema,
   SetOnboardingEmailDto,
@@ -28,6 +36,20 @@ export class UserController {
   @Post('login')
   async login() {
     throw new GoneException('This endpoint is deprecated. Use POST /users/login in grillrentbff_v2.');
+  }
+
+  @Post('forgot-password/request')
+  async requestForgotPassword(
+    @Body(new JoiValidationPipe(ForgotPasswordRequestSchema)) body: ForgotPasswordRequestDto,
+  ) {
+    return this.userService.requestForgotPassword(body);
+  }
+
+  @Post('forgot-password/confirm')
+  async confirmForgotPassword(
+    @Body(new JoiValidationPipe(ForgotPasswordConfirmSchema)) body: ForgotPasswordConfirmDto,
+  ) {
+    return this.userService.confirmForgotPassword(body);
   }
 
   @Post('logout')
@@ -116,5 +138,14 @@ export class UserController {
     @Body(new JoiValidationPipe(ChangeOnboardingPasswordSchema)) body: ChangeOnboardingPasswordDto,
   ) {
     return this.userService.changeOnboardingPassword(currentUser.id, currentUser.organizationId as string, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Put('change-password')
+  async changePassword(
+    @User() currentUser: UserEntity,
+    @Body(new JoiValidationPipe(ChangePasswordSchema)) body: ChangePasswordDto,
+  ) {
+    return this.userService.changePassword(currentUser.id, currentUser.organizationId as string, body);
   }
 }

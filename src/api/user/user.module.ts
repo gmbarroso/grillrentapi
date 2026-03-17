@@ -10,11 +10,15 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { resolveJwtSecret } from '../../shared/auth/jwt-secret.policy';
 import { RevokedToken } from '../../shared/auth/entities/revoked-token.entity';
 import { JwtAuthGuard } from '../../shared/auth/guards/jwt-auth.guard';
+import { Organization } from '../organization/entities/organization.entity';
+import { OrganizationContactEmailSettings } from '../message/entities/organization-contact-email-settings.entity';
+import { EmailModule } from '../../shared/email/email.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, RevokedToken]),
+    TypeOrmModule.forFeature([User, RevokedToken, Organization, OrganizationContactEmailSettings]),
     PassportModule,
+    EmailModule,
     JwtModule.registerAsync({
       global: true,
       imports: [ConfigModule],

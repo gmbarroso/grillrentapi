@@ -7,27 +7,40 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { MoreThan, Repository } from 'typeorm';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { User, UserRole } from '../entities/user.entity';
 import * as bcrypt from 'bcrypt';
-import { createHash, randomBytes } from 'crypto';
+import { createDecipheriv, createHash, randomBytes } from 'crypto';
 import {
+  ChangePasswordDto,
   ChangeOnboardingPasswordDto,
   SetOnboardingEmailDto,
   UserOnboardingStatusDto,
   VerifyOnboardingEmailDto,
 } from '../dto/onboarding.dto';
+import { ForgotPasswordConfirmDto, ForgotPasswordRequestDto } from '../dto/forgot-password.dto';
+import { EmailService } from '../../../shared/email/email.service';
+import { Organization } from '../../organization/entities/organization.entity';
+import { OrganizationContactEmailSettings } from '../../message/entities/organization-contact-email-settings.entity';
 
 @Injectable()
 export class UserService {
   private readonly logger = new Logger(UserService.name);
   private static readonly EMAIL_VERIFICATION_TTL_MS = 1000 * 60 * 30;
+  private static readonly PASSWORD_RESET_TTL_MS = 1000 * 60 * 30;
 
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Organization)
+    private readonly organizationRepository: Repository<Organization>,
+    @InjectRepository(OrganizationContactEmailSettings)
+    private readonly organizationContactEmailSettingsRepository: Repository<OrganizationContactEmailSettings>,
+    private readonly emailService: EmailService,
+    private readonly configService: ConfigService,
   ) {}
 
   async getProfile(userId: string, organizationId: string) {
@@ -186,6 +199,28 @@ export class UserService {
     const plainToken = this.issueVerificationToken(user);
     await this.userRepository.save(user);
 
+    const smtpConfig = await this.resolveOrganizationSmtpConfig(organizationId);
+    if (smtpConfig) {
+      await this.emailService.send({
+        to: [normalizedEmail],
+        from: smtpConfig.fromHeader,
+        subject: 'Verify your email',
+        text: [
+          `Hello ${user.name},`,
+          '',
+          `Use this token to verify your email: ${plainToken}`,
+          'This token expires in 30 minutes.',
+          '',
+          'If you did not request this change, ignore this message.',
+        ].join('\n'),
+        smtp: smtpConfig.smtp,
+      });
+    } else {
+      this.logger.warn(
+        `Onboarding verification email skipped because organization SMTP is not configured (organizationId=${organizationId})`,
+      );
+    }
+
     return {
       message: 'Verification token generated',
       onboarding: this.deriveOnboardingStatus(user),
@@ -262,6 +297,131 @@ export class UserService {
     };
   }
 
+  async changePassword(
+    userId: string,
+    organizationId: string,
+    payload: ChangePasswordDto,
+  ): Promise<{ message: string; user: Record<string, unknown>; onboarding: UserOnboardingStatusDto }> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId, organizationId },
+    });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const isCurrentPasswordValid = await bcrypt.compare(payload.currentPassword, user.password);
+    if (!isCurrentPasswordValid) {
+      throw new BadRequestException('Current password is invalid');
+    }
+    if (payload.currentPassword === payload.newPassword) {
+      throw new BadRequestException('New password must be different from current password');
+    }
+
+    user.password = await bcrypt.hash(payload.newPassword, 10);
+    user.mustChangePassword = false;
+    const updated = await this.userRepository.save(user);
+    return {
+      message: 'Password updated successfully',
+      user: this.toSafeUser(updated),
+      onboarding: this.deriveOnboardingStatus(updated),
+    };
+  }
+
+  async requestForgotPassword(
+    payload: ForgotPasswordRequestDto,
+  ): Promise<{ message: string; resetTokenPreview?: string }> {
+    const organizationSlug = payload.organizationSlug.trim().toLowerCase();
+    const email = payload.email.trim().toLowerCase();
+    const genericResponse = { message: 'If this account exists, reset instructions were sent.' };
+
+    if (!organizationSlug || !email) {
+      return genericResponse;
+    }
+
+    const organization = await this.organizationRepository.findOne({
+      where: { slug: organizationSlug },
+    });
+    if (!organization) {
+      return genericResponse;
+    }
+
+    const user = await this.userRepository.findOne({
+      where: { organizationId: organization.id, email },
+    });
+    if (!user || !user.email) {
+      return genericResponse;
+    }
+
+    const plainToken = randomBytes(32).toString('hex');
+    user.passwordResetTokenHash = this.hashVerificationToken(plainToken);
+    user.passwordResetExpiresAt = new Date(Date.now() + UserService.PASSWORD_RESET_TTL_MS);
+    await this.userRepository.save(user);
+
+    const smtpConfig = await this.resolveOrganizationSmtpConfig(organization.id);
+    if (smtpConfig) {
+      await this.emailService.send({
+        to: [user.email],
+        from: smtpConfig.fromHeader,
+        subject: 'Password reset',
+        text: [
+          `Hello ${user.name},`,
+          '',
+          `Use this token to reset your password: ${plainToken}`,
+          'This token expires in 30 minutes.',
+          '',
+          'If you did not request this change, ignore this message.',
+        ].join('\n'),
+        smtp: smtpConfig.smtp,
+      });
+    } else {
+      this.logger.warn(
+        `Forgot-password email skipped because organization SMTP is not configured (organizationId=${organization.id})`,
+      );
+    }
+
+    if (this.isProductionLike()) {
+      return genericResponse;
+    }
+    return {
+      ...genericResponse,
+      resetTokenPreview: plainToken,
+    };
+  }
+
+  async confirmForgotPassword(payload: ForgotPasswordConfirmDto): Promise<{ message: string }> {
+    const organizationSlug = payload.organizationSlug.trim().toLowerCase();
+    const token = payload.token.trim();
+    if (!organizationSlug || !token) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    const organization = await this.organizationRepository.findOne({
+      where: { slug: organizationSlug },
+    });
+    if (!organization) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    const tokenHash = this.hashVerificationToken(token);
+    const user = await this.userRepository.findOne({
+      where: {
+        organizationId: organization.id,
+        passwordResetTokenHash: tokenHash,
+        passwordResetExpiresAt: MoreThan(new Date()),
+      },
+    });
+    if (!user) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    user.password = await bcrypt.hash(payload.newPassword, 10);
+    user.mustChangePassword = false;
+    user.passwordResetTokenHash = null;
+    user.passwordResetExpiresAt = null;
+    await this.userRepository.save(user);
+    return { message: 'Password reset successfully' };
+  }
+
   private async findUserForOnboarding(userId: string, organizationId: string): Promise<User> {
     const user = await this.userRepository.findOne({
       where: { id: userId, organizationId },
@@ -313,9 +473,97 @@ export class UserService {
     const {
       password: _password,
       emailVerificationTokenHash: _emailVerificationTokenHash,
+      passwordResetTokenHash: _passwordResetTokenHash,
       ...safeUser
     } = user;
 
     return safeUser;
+  }
+
+  private async resolveOrganizationSmtpConfig(organizationId: string): Promise<{
+    fromHeader: string;
+    smtp: {
+      host: string;
+      port: number;
+      secure: boolean;
+      user: string;
+      password: string;
+      from: string;
+    };
+  } | null> {
+    const settings = await this.organizationContactEmailSettingsRepository.findOne({
+      where: { organizationId },
+    });
+    if (!settings) {
+      return null;
+    }
+
+    const decryptedPassword = this.decryptSmtpPassword(
+      settings.smtpAppPasswordEncrypted || null,
+      settings.smtpAppPasswordIv || null,
+      settings.smtpAppPasswordAuthTag || null,
+    );
+
+    if (
+      !settings.smtpHost
+      || !settings.smtpPort
+      || settings.smtpSecure === null
+      || settings.smtpSecure === undefined
+      || !settings.smtpUser
+      || !settings.smtpFrom
+      || !decryptedPassword
+    ) {
+      return null;
+    }
+
+    const fromHeader = settings.fromName?.trim()
+      ? `${settings.fromName.trim()} <${settings.smtpFrom}>`
+      : settings.smtpFrom;
+
+    return {
+      fromHeader,
+      smtp: {
+        host: settings.smtpHost,
+        port: settings.smtpPort,
+        secure: Boolean(settings.smtpSecure),
+        user: settings.smtpUser,
+        password: decryptedPassword,
+        from: settings.smtpFrom,
+      },
+    };
+  }
+
+  private decryptSmtpPassword(encrypted: string | null, iv: string | null, authTag: string | null): string | null {
+    if (!encrypted || !iv || !authTag) {
+      return null;
+    }
+    try {
+      const decipher = createDecipheriv('aes-256-gcm', this.getSmtpEncryptionKey(), Buffer.from(iv, 'base64'));
+      decipher.setAuthTag(Buffer.from(authTag, 'base64'));
+      const decrypted = Buffer.concat([
+        decipher.update(Buffer.from(encrypted, 'base64')),
+        decipher.final(),
+      ]);
+      return decrypted.toString('utf8');
+    } catch {
+      return null;
+    }
+  }
+
+  private getSmtpEncryptionKey(): Buffer {
+    const raw = (this.configService.get<string>('ORG_SMTP_ENCRYPTION_KEY') || '').trim();
+    if (/^[0-9a-fA-F]{64}$/.test(raw)) {
+      return Buffer.from(raw, 'hex');
+    }
+    const decodedBase64 = raw ? Buffer.from(raw, 'base64') : Buffer.alloc(0);
+    if (decodedBase64.length === 32) {
+      return decodedBase64;
+    }
+    return createHash('sha256').update('local-dev-org-smtp-encryption-key').digest();
+  }
+
+  private isProductionLike(): boolean {
+    const env = (this.configService.get<string>('NODE_ENV') || '').toLowerCase();
+    return env === 'production' || env === 'staging';
   }
 }
