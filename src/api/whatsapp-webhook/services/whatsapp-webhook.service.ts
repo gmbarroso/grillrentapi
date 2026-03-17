@@ -24,6 +24,7 @@ interface WebhookHandleResult {
     | 'ignored_invalid_payload'
     | 'ignored_non_group_message'
     | 'ignored_group_not_bound'
+    | 'ignored_integration_not_found'
     | 'duplicate'
     | 'ignored_not_admin'
     | 'ignored_no_text'
@@ -104,7 +105,7 @@ export class WhatsappWebhookService {
     const integration = await this.integrationRepository.findOne({ where: { id: binding.integrationId } });
     if (!integration) {
       await this.markInboundEventIgnored(savedInboundEvent, 'integration_not_found');
-      return { ok: true, status: 'ignored_group_not_bound', reason: 'integration for binding was not found' };
+      return { ok: true, status: 'ignored_integration_not_found', reason: 'integration for binding was not found' };
     }
 
     const senderIsAdmin = await this.isSenderGroupAdmin({

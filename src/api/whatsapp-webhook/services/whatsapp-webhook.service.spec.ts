@@ -104,6 +104,25 @@ describe('WhatsappWebhookService', () => {
     expect(result.status).toBe('duplicate');
   });
 
+  it('returns ignored_integration_not_found when binding exists but integration is missing', async () => {
+    const queryBuilder = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getOne: jest.fn().mockResolvedValue({
+        organizationId: 'org-1',
+        integrationId: 'integration-missing',
+        groupJid: '120363405906248196@g.us',
+      }),
+    };
+    groupBindingRepository.createQueryBuilder.mockReturnValue(queryBuilder);
+    inboundEventRepository.save.mockResolvedValue({ id: 'inbound-1', organizationId: 'org-1' });
+    integrationRepository.findOne.mockResolvedValue(null);
+
+    const result = await service.handleEvolutionWebhook(validPayload, 'webhook-secret-123');
+
+    expect(result.status).toBe('ignored_integration_not_found');
+  });
+
   it('creates notice for group-admin sender', async () => {
     const queryBuilder = {
       where: jest.fn().mockReturnThis(),

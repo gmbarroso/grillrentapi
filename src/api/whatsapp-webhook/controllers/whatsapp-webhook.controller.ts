@@ -16,6 +16,7 @@ export class WhatsappWebhookController {
       | 'ignored_invalid_payload'
       | 'ignored_non_group_message'
       | 'ignored_group_not_bound'
+      | 'ignored_integration_not_found'
       | 'duplicate'
       | 'ignored_not_admin'
       | 'ignored_no_text'

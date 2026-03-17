@@ -8,7 +8,10 @@ import {
   OrganizationContactEmailSettings,
 } from '../entities/organization-contact-email-settings.entity';
 import { ContactEmailSettingsViewDto, UpdateContactEmailSettingsDto } from '../dto/contact-email-settings.dto';
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
+import {
+  decryptOrganizationSmtpSecret,
+  encryptOrganizationSmtpSecret,
+} from '../../../shared/security/org-smtp-crypto.util';
 
 interface ContactEmailSettingsValidation {
   valid: boolean;
@@ -63,7 +66,7 @@ export class ContactEmailSettingsService {
     const payload = this.sanitizePayload(data);
     const encryptedSecret = payload.smtpAppPasswordProvided
       ? payload.smtpAppPassword
-        ? this.encryptSecret(payload.smtpAppPassword)
+        ? encryptOrganizationSmtpSecret(payload.smtpAppPassword, this.configService)
         : null
       : null;
 
@@ -91,9 +94,7 @@ export class ContactEmailSettingsService {
         ? encryptedSecret?.authTag ?? null
         : existing?.smtpAppPasswordAuthTag ?? null,
       smtpAppPasswordKeyVersion: payload.smtpAppPasswordProvided
-        ? payload.smtpAppPassword
-          ? this.getEncryptionKeyVersion()
-          : null
+        ? encryptedSecret?.keyVersion ?? null
         : existing?.smtpAppPasswordKeyVersion ?? null,
     });
 
@@ -128,6 +129,7 @@ export class ContactEmailSettingsService {
       normalized.smtpAppPasswordEncrypted,
       normalized.smtpAppPasswordIv,
       normalized.smtpAppPasswordAuthTag,
+      normalized.smtpAppPasswordKeyVersion,
     );
     if (!decryptedPassword) {
       return {
@@ -207,6 +209,7 @@ export class ContactEmailSettingsService {
     smtpAppPasswordEncrypted: string | null;
     smtpAppPasswordIv: string | null;
     smtpAppPasswordAuthTag: string | null;
+    smtpAppPasswordKeyVersion: string | null;
     hasSmtpPassword: boolean;
   } {
     if (!settings) {
@@ -225,6 +228,7 @@ export class ContactEmailSettingsService {
         smtpAppPasswordEncrypted: null,
         smtpAppPasswordIv: null,
         smtpAppPasswordAuthTag: null,
+        smtpAppPasswordKeyVersion: null,
         hasSmtpPassword: false,
       };
     }
@@ -244,6 +248,7 @@ export class ContactEmailSettingsService {
       smtpAppPasswordEncrypted: settings.smtpAppPasswordEncrypted || null,
       smtpAppPasswordIv: settings.smtpAppPasswordIv || null,
       smtpAppPasswordAuthTag: settings.smtpAppPasswordAuthTag || null,
+      smtpAppPasswordKeyVersion: settings.smtpAppPasswordKeyVersion || null,
       hasSmtpPassword: Boolean(settings.smtpAppPasswordEncrypted && settings.smtpAppPasswordIv && settings.smtpAppPasswordAuthTag),
     };
   }
@@ -381,67 +386,18 @@ export class ContactEmailSettingsService {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
   }
 
-  private encryptSecret(plainValue: string): { encrypted: string; iv: string; authTag: string } {
-    const iv = randomBytes(12);
-    const cipher = createCipheriv('aes-256-gcm', this.getEncryptionKey(), iv);
-    const encrypted = Buffer.concat([cipher.update(plainValue, 'utf8'), cipher.final()]);
-    return {
-      encrypted: encrypted.toString('base64'),
-      iv: iv.toString('base64'),
-      authTag: cipher.getAuthTag().toString('base64'),
-    };
-  }
-
   private decryptSecret(
     encryptedValue: string | null,
     ivValue: string | null,
     authTagValue: string | null,
+    keyVersion: string | null,
   ): string | null {
-    if (!encryptedValue || !ivValue || !authTagValue) {
-      return null;
-    }
-
-    try {
-      const decipher = createDecipheriv(
-        'aes-256-gcm',
-        this.getEncryptionKey(),
-        Buffer.from(ivValue, 'base64'),
-      );
-      decipher.setAuthTag(Buffer.from(authTagValue, 'base64'));
-      const decrypted = Buffer.concat([
-        decipher.update(Buffer.from(encryptedValue, 'base64')),
-        decipher.final(),
-      ]);
-      return decrypted.toString('utf8');
-    } catch {
-      return null;
-    }
-  }
-
-  private getEncryptionKey(): Buffer {
-    const raw = (this.configService.get<string>('ORG_SMTP_ENCRYPTION_KEY') || '').trim();
-    const nodeEnv = (this.configService.get<string>('NODE_ENV') || '').toLowerCase();
-
-    if (!raw) {
-      if (nodeEnv === 'production' || nodeEnv === 'staging') {
-        throw new Error('ORG_SMTP_ENCRYPTION_KEY is required in production/staging');
-      }
-      return createHash('sha256').update('local-dev-org-smtp-encryption-key').digest();
-    }
-
-    if (/^[0-9a-fA-F]{64}$/.test(raw)) {
-      return Buffer.from(raw, 'hex');
-    }
-
-    const decodedBase64 = Buffer.from(raw, 'base64');
-    if (decodedBase64.length === 32) {
-      return decodedBase64;
-    }
-
-    throw new Error('ORG_SMTP_ENCRYPTION_KEY must be a 32-byte key (base64) or 64-char hex');
-  }
-
-  private getEncryptionKeyVersion(): string {
-    return (this.configService.get<string>('ORG_SMTP_ENCRYPTION_KEY_VERSION') || 'v1').trim();
+    return decryptOrganizationSmtpSecret(
+      encryptedValue,
+      ivValue,
+      authTagValue,
+      this.configService,
+      keyVersion,
+    );
   }
 }

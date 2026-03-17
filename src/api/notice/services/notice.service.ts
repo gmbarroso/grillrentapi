@@ -103,7 +103,13 @@ export class NoticeService {
           LIMIT 1
         )
         SELECT
-          COUNT(*)::int AS "unreadCount",
+          (
+            SELECT COUNT(*)::int
+            FROM "notice" "n"
+            LEFT JOIN "read_state" "rs" ON TRUE
+            WHERE "n"."organizationId" = $2
+              AND ("rs"."lastSeenNoticesAt" IS NULL OR "n"."createdAt" > "rs"."lastSeenNoticesAt")
+          ) AS "unreadCount",
           EXISTS (
             SELECT 1
             FROM "notice" "n"

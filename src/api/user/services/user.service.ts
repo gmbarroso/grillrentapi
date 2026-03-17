@@ -13,7 +13,7 @@ import { MoreThan, Repository } from 'typeorm';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { User, UserRole } from '../entities/user.entity';
 import * as bcrypt from 'bcrypt';
-import { createDecipheriv, createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import {
   ChangePasswordDto,
   ChangeOnboardingPasswordDto,
@@ -25,6 +25,7 @@ import { ForgotPasswordConfirmDto, ForgotPasswordRequestDto } from '../dto/forgo
 import { EmailService } from '../../../shared/email/email.service';
 import { Organization } from '../../organization/entities/organization.entity';
 import { OrganizationContactEmailSettings } from '../../message/entities/organization-contact-email-settings.entity';
+import { decryptOrganizationSmtpSecret } from '../../../shared/security/org-smtp-crypto.util';
 
 @Injectable()
 export class UserService {
@@ -481,6 +482,7 @@ export class UserService {
       settings.smtpAppPasswordEncrypted || null,
       settings.smtpAppPasswordIv || null,
       settings.smtpAppPasswordAuthTag || null,
+      settings.smtpAppPasswordKeyVersion || null,
     );
 
     if (
@@ -512,47 +514,19 @@ export class UserService {
     };
   }
 
-  private decryptSmtpPassword(encrypted: string | null, iv: string | null, authTag: string | null): string | null {
-    if (!encrypted || !iv || !authTag) {
-      return null;
-    }
-    const encryptionKey = this.getSmtpEncryptionKey();
-    try {
-      const decipher = createDecipheriv('aes-256-gcm', encryptionKey, Buffer.from(iv, 'base64'));
-      decipher.setAuthTag(Buffer.from(authTag, 'base64'));
-      const decrypted = Buffer.concat([
-        decipher.update(Buffer.from(encrypted, 'base64')),
-        decipher.final(),
-      ]);
-      return decrypted.toString('utf8');
-    } catch {
-      return null;
-    }
-  }
-
-  private getSmtpEncryptionKey(): Buffer {
-    const raw = (this.configService.get<string>('ORG_SMTP_ENCRYPTION_KEY') || '').trim();
-    if (!raw) {
-      if (this.isProductionLike()) {
-        throw new Error('ORG_SMTP_ENCRYPTION_KEY is required in production/staging');
-      }
-      return createHash('sha256').update('local-dev-org-smtp-encryption-key').digest();
-    }
-
-    if (/^[0-9a-fA-F]{64}$/.test(raw)) {
-      return Buffer.from(raw, 'hex');
-    }
-
-    const decodedBase64 = Buffer.from(raw, 'base64');
-    if (decodedBase64.length === 32) {
-      return decodedBase64;
-    }
-
-    if (this.isProductionLike()) {
-      throw new Error('ORG_SMTP_ENCRYPTION_KEY must be a 32-byte key (base64) or 64-char hex');
-    }
-
-    return createHash('sha256').update('local-dev-org-smtp-encryption-key').digest();
+  private decryptSmtpPassword(
+    encrypted: string | null,
+    iv: string | null,
+    authTag: string | null,
+    keyVersion: string | null,
+  ): string | null {
+    return decryptOrganizationSmtpSecret(
+      encrypted,
+      iv,
+      authTag,
+      this.configService,
+      keyVersion,
+    );
   }
 
   private isProductionLike(): boolean {
