@@ -75,6 +75,9 @@ export class UserController {
     if (updateData.password !== undefined) {
       throw new BadRequestException('Use onboarding password endpoint to change password');
     }
+    if (updateData.email !== undefined) {
+      throw new BadRequestException('Use onboarding email endpoint to change email');
+    }
 
     return this.userService.updateProfile(userId, updateData, req.user);
   }
@@ -97,6 +100,9 @@ export class UserController {
     if (currentUser.role !== UserRole.ADMIN) {
       this.logger.warn(`User ID: ${currentUser.id} does not have permission to update users`);
       throw new ForbiddenException('You do not have permission to update users');
+    }
+    if (updateData.email !== undefined) {
+      throw new BadRequestException('Email cannot be changed via admin update endpoint');
     }
     return this.userService.updateUserById(id, updateData, currentUser);
   }

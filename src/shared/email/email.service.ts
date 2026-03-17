@@ -34,12 +34,6 @@ export class EmailService {
   constructor(private readonly configService: ConfigService) {}
 
   async send(input: SendEmailInput): Promise<SendEmailResult> {
-    if (input.smtp) {
-      return this.sendViaProvidedSmtp(input, input.smtp);
-    }
-
-    const provider = (this.configService.get<string>('EMAIL_PROVIDER') || 'gmail_smtp').trim().toLowerCase();
-
     if (!input.to.length) {
       return {
         status: 'skipped',
@@ -47,6 +41,12 @@ export class EmailService {
         errorMessage: 'No recipients configured',
       };
     }
+
+    if (input.smtp) {
+      return this.sendViaProvidedSmtp(input, input.smtp);
+    }
+
+    const provider = (this.configService.get<string>('EMAIL_PROVIDER') || 'gmail_smtp').trim().toLowerCase();
 
     if (provider !== 'gmail_smtp' && provider !== 'smtp') {
       return {
@@ -77,7 +77,7 @@ export class EmailService {
       return {
         status: 'skipped',
         providerMessageId: null,
-        errorMessage: 'SMTP_USER/SMTP_APP_PASSWORD is not configured',
+        errorMessage: 'SMTP_USER and SMTP_APP_PASSWORD or SMTP_PASSWORD must be configured',
       };
     }
 
@@ -136,6 +136,14 @@ export class EmailService {
       from: string;
     },
   ): Promise<SendEmailResult> {
+    if (!input.to.length) {
+      return {
+        status: 'skipped',
+        providerMessageId: null,
+        errorMessage: 'No recipients configured',
+      };
+    }
+
     if (!smtp.user || !smtp.password || !smtp.from || !smtp.host || !smtp.port) {
       return {
         status: 'skipped',

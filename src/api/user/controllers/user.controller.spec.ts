@@ -22,9 +22,12 @@ describe('UserController', () => {
             updateUserById: jest.fn(),
             getAllUsers: jest.fn(),
             remove: jest.fn(),
+            requestForgotPassword: jest.fn(),
+            confirmForgotPassword: jest.fn(),
             setOnboardingEmail: jest.fn(),
             verifyOnboardingEmail: jest.fn(),
             changeOnboardingPassword: jest.fn(),
+            changePassword: jest.fn(),
           },
         },
       ],
@@ -89,13 +92,11 @@ describe('UserController', () => {
         role: UserRole.RESIDENT,
       };
       const updateUserDto: UpdateUserDto = {
-        email: 'newemail@example.com',
-        apartment: '102',
+        name: 'new name',
       };
       const updatedUser: User = {
         ...user,
-        email: 'newemail@example.com',
-        apartment: '102',
+        name: 'new name',
       };
       const result = { message: 'User profile updated successfully', user: updatedUser, onboarding: {} };
       jest.spyOn(service, 'updateProfile').mockResolvedValue(result as any);
@@ -118,6 +119,24 @@ describe('UserController', () => {
       await expect(
         controller.updateProfile(req, {
           password: 'Newpass123',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject email change via profile endpoint', async () => {
+      const user: User = {
+        id: '1',
+        name: 'testuser',
+        password: 'hashedpassword',
+        email: 'testuser@example.com',
+        apartment: '101',
+        block: 1,
+        role: UserRole.RESIDENT,
+      };
+      const req = { user } as any;
+      await expect(
+        controller.updateProfile(req, {
+          email: 'newemail@example.com',
         }),
       ).rejects.toThrow(BadRequestException);
     });
@@ -208,6 +227,33 @@ describe('UserController', () => {
           { id: 'resident-1', organizationId: 'org-1', role: UserRole.RESIDENT } as any,
           { currentPassword: 'Password1', newPassword: 'Password2' },
         ),
+      ).resolves.toEqual(response);
+    });
+  });
+
+  describe('forgot-password endpoints', () => {
+    it('should request forgot password', async () => {
+      const response = { message: 'If this account exists, reset instructions were sent.' };
+      jest.spyOn(service, 'requestForgotPassword').mockResolvedValue(response as any);
+
+      await expect(
+        controller.requestForgotPassword({
+          organizationSlug: 'my-condo',
+          email: 'resident@example.com',
+        }),
+      ).resolves.toEqual(response);
+    });
+
+    it('should confirm forgot password', async () => {
+      const response = { message: 'Password reset successfully' };
+      jest.spyOn(service, 'confirmForgotPassword').mockResolvedValue(response as any);
+
+      await expect(
+        controller.confirmForgotPassword({
+          organizationSlug: 'my-condo',
+          token: 'a'.repeat(64),
+          newPassword: 'Password2@',
+        }),
       ).resolves.toEqual(response);
     });
   });

@@ -79,17 +79,7 @@ export class UserService {
       user.password = await bcrypt.hash(updateUserDto.password, 10);
     }
     if (updateUserDto.email !== undefined) {
-      const normalizedEmail = updateUserDto.email?.trim().toLowerCase() || null;
-      user.pendingEmail = normalizedEmail;
-      if (normalizedEmail) {
-        this.issueVerificationToken(user);
-      } else {
-        user.email = null;
-        user.emailVerifiedAt = null;
-        user.pendingEmail = null;
-        user.emailVerificationTokenHash = null;
-        user.emailVerificationExpiresAt = null;
-      }
+      throw new BadRequestException('Use onboarding email endpoint to change email');
     }
 
     Object.assign(user, {
@@ -141,17 +131,7 @@ export class UserService {
       user.mustChangePassword = true;
     }
     if (updateUserDto.email !== undefined) {
-      const normalizedEmail = updateUserDto.email?.trim().toLowerCase() || null;
-      user.pendingEmail = normalizedEmail;
-      if (normalizedEmail) {
-        this.issueVerificationToken(user);
-      } else {
-        user.email = null;
-        user.emailVerifiedAt = null;
-        user.pendingEmail = null;
-        user.emailVerificationTokenHash = null;
-        user.emailVerificationExpiresAt = null;
-      }
+      throw new BadRequestException('Email cannot be changed via admin update endpoint');
     }
 
     Object.assign(user, {
@@ -537,8 +517,9 @@ export class UserService {
     if (!encrypted || !iv || !authTag) {
       return null;
     }
+    const encryptionKey = this.getSmtpEncryptionKey();
     try {
-      const decipher = createDecipheriv('aes-256-gcm', this.getSmtpEncryptionKey(), Buffer.from(iv, 'base64'));
+      const decipher = createDecipheriv('aes-256-gcm', encryptionKey, Buffer.from(iv, 'base64'));
       decipher.setAuthTag(Buffer.from(authTag, 'base64'));
       const decrypted = Buffer.concat([
         decipher.update(Buffer.from(encrypted, 'base64')),
@@ -552,13 +533,26 @@ export class UserService {
 
   private getSmtpEncryptionKey(): Buffer {
     const raw = (this.configService.get<string>('ORG_SMTP_ENCRYPTION_KEY') || '').trim();
+    if (!raw) {
+      if (this.isProductionLike()) {
+        throw new Error('ORG_SMTP_ENCRYPTION_KEY is required in production/staging');
+      }
+      return createHash('sha256').update('local-dev-org-smtp-encryption-key').digest();
+    }
+
     if (/^[0-9a-fA-F]{64}$/.test(raw)) {
       return Buffer.from(raw, 'hex');
     }
-    const decodedBase64 = raw ? Buffer.from(raw, 'base64') : Buffer.alloc(0);
+
+    const decodedBase64 = Buffer.from(raw, 'base64');
     if (decodedBase64.length === 32) {
       return decodedBase64;
     }
+
+    if (this.isProductionLike()) {
+      throw new Error('ORG_SMTP_ENCRYPTION_KEY must be a 32-byte key (base64) or 64-char hex');
+    }
+
     return createHash('sha256').update('local-dev-org-smtp-encryption-key').digest();
   }
 

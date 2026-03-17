@@ -80,7 +80,7 @@ export class MessageService {
       }),
     );
 
-    return this.findById(updated.id, organizationId);
+    return updated;
   }
 
   async findAllForAdmin(
