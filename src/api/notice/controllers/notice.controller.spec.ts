@@ -34,12 +34,12 @@ describe('NoticeController', () => {
     service = module.get(NoticeService) as jest.Mocked<NoticeService>;
   });
 
-  it('returns unread count for authenticated user', async () => {
-    service.getUnreadCount.mockResolvedValue({ unreadCount: 3, lastSeenNoticesAt: null });
+  it('returns unread state for authenticated user', async () => {
+    service.getUnreadCount.mockResolvedValue({ unreadCount: 5, hasUnread: true, lastSeenNoticesAt: null });
 
     await expect(
       controller.getUnreadCount({ user: { id: 'user-1', organizationId: 'org-1' } } as any),
-    ).resolves.toEqual({ unreadCount: 3, lastSeenNoticesAt: null });
+    ).resolves.toEqual({ unreadCount: 5, hasUnread: true, lastSeenNoticesAt: null });
     expect(service.getUnreadCount).toHaveBeenCalledWith('user-1', 'org-1');
   });
 

@@ -9,5 +9,5 @@ export class LoginUserDto {
 export const LoginUserSchema = Joi.object({
   apartment: Joi.string().required(),
   block: Joi.number().valid(1, 2).required(),
-  password: Joi.string().min(8).max(12).required(),
+  password: Joi.string().min(1).max(100).required(),
 });

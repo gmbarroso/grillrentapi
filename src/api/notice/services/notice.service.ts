@@ -1,11 +1,12 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThan, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Notice, NoticeWhatsappDeliveryStatus } from '../entities/notice.entity';
 import { NoticeReadState } from '../entities/notice-read-state.entity';
 import { CreateNoticeDto } from '../dto/create-notice.dto';
 import { UpdateNoticeDto } from '../dto/update-notice.dto';
+import { WhatsappSettingsService } from '../../whatsapp-settings/services/whatsapp-settings.service';
 
 class WhatsappSendError extends Error {
   constructor(
@@ -34,10 +35,13 @@ export class NoticeService {
     @InjectRepository(NoticeReadState)
     private readonly noticeReadStateRepository: Repository<NoticeReadState>,
     private readonly configService: ConfigService,
+    @Optional()
+    private readonly whatsappSettingsService?: WhatsappSettingsService,
   ) {}
 
   async create(data: CreateNoticeDto, organizationId: string): Promise<Notice> {
-    const shouldSendViaWhatsapp = Boolean(data.sendViaWhatsapp);
+    const autoSendEnabled = await this.resolveAutoSendNotices(organizationId);
+    const shouldSendViaWhatsapp = Boolean(data.sendViaWhatsapp) || autoSendEnabled;
 
     const notice = this.noticeRepository.create({
       ...data,
@@ -88,31 +92,68 @@ export class NoticeService {
   async getUnreadCount(
     userId: string,
     organizationId: string,
-  ): Promise<{ unreadCount: number; lastSeenNoticesAt: string | null }> {
-    const readState = await this.noticeReadStateRepository.findOne({
-      where: { userId, organizationId },
-    });
+  ): Promise<{ unreadCount: number; hasUnread: boolean; lastSeenNoticesAt: string | null }> {
+    const [row] = (await this.noticeReadStateRepository.query(
+      `
+        WITH "read_state" AS (
+          SELECT "lastSeenNoticesAt"
+          FROM "notice_read_state"
+          WHERE "userId" = $1
+            AND "organizationId" = $2
+          LIMIT 1
+        )
+        SELECT
+          (
+            SELECT COUNT(*)::int
+            FROM "notice" "n"
+            LEFT JOIN "read_state" "rs" ON TRUE
+            WHERE "n"."organizationId" = $2
+              AND ("rs"."lastSeenNoticesAt" IS NULL OR "n"."createdAt" > "rs"."lastSeenNoticesAt")
+          ) AS "unreadCount",
+          EXISTS (
+            SELECT 1
+            FROM "notice" "n"
+            LEFT JOIN "read_state" "rs" ON TRUE
+            WHERE "n"."organizationId" = $2
+              AND ("rs"."lastSeenNoticesAt" IS NULL OR "n"."createdAt" > "rs"."lastSeenNoticesAt")
+          ) AS "hasUnread",
+          (
+            SELECT "lastSeenNoticesAt"
+            FROM "read_state"
+          ) AS "lastSeenNoticesAt",
+          (
+            SELECT EXISTS (SELECT 1 FROM "read_state")
+          ) AS "hasReadStateRow"
+      `,
+      [userId, organizationId],
+    )) as Array<{
+      unreadCount: number | string;
+      hasUnread: boolean | 'true' | 'false';
+      lastSeenNoticesAt: string | Date | null;
+      hasReadStateRow?: boolean | 'true' | 'false';
+    }>;
 
-    const lastSeenNoticesAt = readState?.lastSeenNoticesAt ?? null;
-    const unreadCount = await this.noticeRepository.count({
-      where: {
-        organizationId,
-        ...(lastSeenNoticesAt ? { createdAt: MoreThan(lastSeenNoticesAt) } : {}),
-      },
-    });
+    const unreadCountRaw = row?.unreadCount ?? 0;
+    const unreadCount = typeof unreadCountRaw === 'number' ? unreadCountRaw : Number.parseInt(unreadCountRaw, 10) || 0;
+    const hasUnread = row?.hasUnread === true || row?.hasUnread === 'true';
+    const hasReadStateRow = row?.hasReadStateRow === true || row?.hasReadStateRow === 'true';
+    const lastSeenValue = row?.lastSeenNoticesAt ?? null;
+    const lastSeenNoticesAt = lastSeenValue ? new Date(lastSeenValue).toISOString() : null;
 
     this.logger.log(
       JSON.stringify({
         event: 'notice_unread_count_fetched',
         organizationId,
         unreadCount,
-        hasReadState: Boolean(readState),
+        hasUnread,
+        hasReadStateRow,
       }),
     );
 
     return {
       unreadCount,
-      lastSeenNoticesAt: lastSeenNoticesAt ? lastSeenNoticesAt.toISOString() : null,
+      hasUnread,
+      lastSeenNoticesAt,
     };
   }
 
@@ -187,23 +228,11 @@ export class NoticeService {
       return notice;
     }
 
-    const groupJid = this.resolveOrganizationGroupJid(organizationId);
-    if (!groupJid) {
+    const deliveryConfig = await this.resolveWhatsappDeliveryConfiguration(organizationId);
+    if (!deliveryConfig) {
       return this.persistWhatsappFailure(notice, {
         status: 'skipped',
         error: 'WhatsApp group is not configured for this organization',
-        retryable: false,
-      });
-    }
-
-    const baseUrl = this.configService.get<string>('WHATSAPP_EVOLUTION_BASE_URL')?.trim();
-    const instance = this.configService.get<string>('WHATSAPP_EVOLUTION_INSTANCE')?.trim();
-    const apiKey = this.configService.get<string>('WHATSAPP_EVOLUTION_API_KEY')?.trim();
-
-    if (!baseUrl || !instance || !apiKey) {
-      return this.persistWhatsappFailure(notice, {
-        status: 'failed',
-        error: 'WhatsApp provider credentials are not configured',
         retryable: false,
       });
     }
@@ -224,10 +253,10 @@ export class NoticeService {
       try {
         const providerResult = await this.sendToEvolutionApi({
           notice: current,
-          baseUrl,
-          instance,
-          apiKey,
-          groupJid,
+          baseUrl: deliveryConfig.baseUrl,
+          instance: deliveryConfig.instanceName,
+          apiKey: deliveryConfig.apiKey,
+          groupJid: deliveryConfig.groupJid,
         });
 
         const sentNotice = await this.noticeRepository.save({
@@ -375,6 +404,45 @@ export class NoticeService {
       );
       return null;
     }
+  }
+
+  private async resolveWhatsappDeliveryConfiguration(
+    organizationId: string,
+  ): Promise<{ baseUrl: string; instanceName: string; apiKey: string; groupJid: string } | null> {
+    if (this.whatsappSettingsService) {
+      const dbConfig = await this.whatsappSettingsService.getDeliveryConfigForFeature(organizationId, 'notices');
+      if (dbConfig) {
+        return {
+          baseUrl: dbConfig.baseUrl,
+          instanceName: dbConfig.instanceName,
+          apiKey: dbConfig.apiKey,
+          groupJid: dbConfig.groupJid,
+        };
+      }
+    }
+
+    const groupJid = this.resolveOrganizationGroupJid(organizationId);
+    const baseUrl = this.configService.get<string>('WHATSAPP_EVOLUTION_BASE_URL')?.trim();
+    const instanceName = this.configService.get<string>('WHATSAPP_EVOLUTION_INSTANCE')?.trim();
+    const apiKey = this.configService.get<string>('WHATSAPP_EVOLUTION_API_KEY')?.trim();
+
+    if (!groupJid || !baseUrl || !instanceName || !apiKey) {
+      return null;
+    }
+
+    return {
+      baseUrl,
+      instanceName,
+      apiKey,
+      groupJid,
+    };
+  }
+
+  private async resolveAutoSendNotices(organizationId: string): Promise<boolean> {
+    if (!this.whatsappSettingsService) {
+      return false;
+    }
+    return this.whatsappSettingsService.isAutoSendNoticesEnabled(organizationId);
   }
 
   private async persistWhatsappFailure(

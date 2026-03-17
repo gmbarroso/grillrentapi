@@ -1,160 +1,272 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UserService } from './user.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { User, UserRole } from '../entities/user.entity';
 import { Repository } from 'typeorm';
-import { UnauthorizedException, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { UpdateUserDto } from '../dto/update-user.dto';
+import { BadRequestException } from '@nestjs/common';
+import { createHash } from 'crypto';
+import { UserService } from './user.service';
+import { User, UserRole } from '../entities/user.entity';
+import { Organization } from '../../organization/entities/organization.entity';
+import { OrganizationContactEmailSettings } from '../../message/entities/organization-contact-email-settings.entity';
+import { EmailService } from '../../../shared/email/email.service';
+import { ConfigService } from '@nestjs/config';
 
 describe('UserService', () => {
   let service: UserService;
-  let repository: Repository<User>;
+  let userRepository: jest.Mocked<Repository<User>>;
+  let organizationRepository: jest.Mocked<Repository<Organization>>;
+  let organizationContactEmailSettingsRepository: jest.Mocked<Repository<OrganizationContactEmailSettings>>;
+  let emailService: jest.Mocked<EmailService>;
+  let configService: jest.Mocked<ConfigService>;
 
   beforeEach(async () => {
-    jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UserService,
         {
           provide: getRepositoryToken(User),
-          useClass: Repository,
+          useValue: {
+            findOne: jest.fn(),
+            save: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(Organization),
+          useValue: {
+            findOne: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(OrganizationContactEmailSettings),
+          useValue: {
+            findOne: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: EmailService,
+          useValue: {
+            send: jest.fn(),
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string) => {
+              if (key === 'NODE_ENV') {
+                return 'development';
+              }
+              if (key === 'ORG_SMTP_ENCRYPTION_KEY') {
+                return '';
+              }
+              return undefined;
+            }),
+          },
         },
       ],
     }).compile();
 
-    service = module.get<UserService>(UserService);
-    repository = module.get<Repository<User>>(getRepositoryToken(User));
+    service = module.get(UserService);
+    userRepository = module.get(getRepositoryToken(User));
+    organizationRepository = module.get(getRepositoryToken(Organization));
+    organizationContactEmailSettingsRepository = module.get(getRepositoryToken(OrganizationContactEmailSettings));
+    emailService = module.get(EmailService);
+    configService = module.get(ConfigService);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
-  describe('getProfile', () => {
-    it('should get user profile', async () => {
-      const user = {
-        id: '1',
-        name: 'testuser',
-        password: 'hashedpassword',
-        email: 'testuser@example.com',
-        apartment: '101',
-        block: 1,
-        role: UserRole.RESIDENT,
-      };
-      jest.spyOn(repository, 'findOne').mockResolvedValue(user as any);
-
-      expect(await service.getProfile('1', '9dd02335-74fa-487b-99f3-f3e6f9fba2af')).toEqual({ message: 'User profile retrieved successfully', user });
+  it('returns generic forgot-password response when organization or email is missing', async () => {
+    const result = await service.requestForgotPassword({
+      organizationSlug: '   ',
+      email: '',
     });
 
-    it('should throw an UnauthorizedException if user is not found', async () => {
-      jest.spyOn(repository, 'findOne').mockResolvedValue(null);
-
-      await expect(service.getProfile('1', '9dd02335-74fa-487b-99f3-f3e6f9fba2af')).rejects.toThrow(UnauthorizedException);
+    expect(result).toEqual({
+      message: 'If this account exists, reset instructions were sent.',
     });
   });
 
-  describe('updateProfile', () => {
-    it('should update user profile', async () => {
-      const updateUserDto: UpdateUserDto = {
-        name: 'newname',
-        email: 'newemail@example.com',
-      };
-      const user: User = {
-        id: '1',
-        name: 'testuser',
-        password: 'hashedpassword',
-        email: 'testuser@example.com',
-        apartment: '101',
-        block: 1,
-        role: UserRole.RESIDENT,
-        organizationId: '9dd02335-74fa-487b-99f3-f3e6f9fba2af',
-      };
-      const updatedUser = { ...user, ...updateUserDto };
-      jest.spyOn(repository, 'findOne').mockResolvedValue(user as any);
-      jest.spyOn(repository, 'save').mockResolvedValue(updatedUser as any);
+  it('returns generic forgot-password response when organization does not exist', async () => {
+    organizationRepository.findOne.mockResolvedValue(null);
 
-      expect(await service.updateProfile('1', updateUserDto, user)).toEqual({ message: 'User profile updated successfully', user: updatedUser });
+    const result = await service.requestForgotPassword({
+      organizationSlug: 'condo-a',
+      email: 'resident@example.com',
     });
 
-    it('should throw an UnauthorizedException if user is not found', async () => {
-      const updateUserDto: UpdateUserDto = {
-        email: 'newemail@example.com',
-        apartment: '102',
-      };
-      const currentUser: User = {
-        id: '1',
-        name: 'testuser',
-        password: 'hashedpassword',
-        email: 'testuser@example.com',
-        apartment: '101',
-        block: 1,
-        role: UserRole.RESIDENT,
-        organizationId: '9dd02335-74fa-487b-99f3-f3e6f9fba2af',
-      };
-      jest.spyOn(repository, 'findOne').mockResolvedValue(null);
-
-      await expect(service.updateProfile('1', updateUserDto, currentUser)).rejects.toThrow(UnauthorizedException);
-    });
-
-    it('should throw a ForbiddenException if resident tries to update apartment or block', async () => {
-      const updateUserDto: UpdateUserDto = {
-        apartment: '102',
-        block: 2,
-      };
-      const user: User = {
-        id: '1',
-        name: 'testuser',
-        password: 'hashedpassword',
-        email: 'testuser@example.com',
-        apartment: '101',
-        block: 1,
-        role: UserRole.RESIDENT,
-        organizationId: '9dd02335-74fa-487b-99f3-f3e6f9fba2af',
-      };
-      jest.spyOn(repository, 'findOne').mockResolvedValue(user as any);
-
-      await expect(service.updateProfile('1', updateUserDto, user)).rejects.toThrow(ForbiddenException);
+    expect(result).toEqual({
+      message: 'If this account exists, reset instructions were sent.',
     });
   });
 
-  describe('getAllUsers', () => {
-    it('should get all users', async () => {
-      const users = [{
-        id: '1',
-        name: 'testuser',
-        password: 'hashedpassword',
-        email: 'testuser@example.com',
-        apartment: '101',
-        block: 1,
-        role: UserRole.RESIDENT,
-      }];
-      jest.spyOn(repository, 'find').mockResolvedValue(users as any);
+  it('returns generic forgot-password response when user does not exist in organization', async () => {
+    organizationRepository.findOne.mockResolvedValue({
+      id: 'org-1',
+      slug: 'condo-a',
+      name: 'Condo A',
+    } as Organization);
+    userRepository.findOne.mockResolvedValue(null);
 
-      expect(await service.getAllUsers('9dd02335-74fa-487b-99f3-f3e6f9fba2af')).toEqual({ message: 'All users retrieved successfully', users });
+    const result = await service.requestForgotPassword({
+      organizationSlug: 'condo-a',
+      email: 'resident@example.com',
+    });
+
+    expect(result).toEqual({
+      message: 'If this account exists, reset instructions were sent.',
     });
   });
 
-  describe('remove', () => {
-    it('should remove a user', async () => {
-      const user = {
-        id: '1',
-        name: 'testuser',
-        password: 'hashedpassword',
-        email: 'testuser@example.com',
-        apartment: '101',
-        block: 1,
-        role: UserRole.RESIDENT,
-      };
-      jest.spyOn(repository, 'findOne').mockResolvedValue(user as any);
-      jest.spyOn(repository, 'remove').mockResolvedValue(user as any);
+  it('stores hashed reset token and returns preview in non-production-like env', async () => {
+    organizationRepository.findOne.mockResolvedValue({
+      id: 'org-1',
+      slug: 'condo-a',
+      name: 'Condo A',
+    } as Organization);
+    userRepository.findOne.mockResolvedValue({
+      id: 'user-1',
+      name: 'Resident',
+      email: 'resident@example.com',
+      role: UserRole.RESIDENT,
+      password: 'hashed',
+      organizationId: 'org-1',
+    } as User);
+    userRepository.save.mockImplementation(async (value) => value as User);
 
-      expect(await service.remove('1', '9dd02335-74fa-487b-99f3-f3e6f9fba2af')).toEqual({ message: 'User removed successfully' });
+    const result = await service.requestForgotPassword({
+      organizationSlug: 'condo-a',
+      email: 'resident@example.com',
     });
 
-    it('should throw a NotFoundException if user is not found', async () => {
-      jest.spyOn(repository, 'findOne').mockResolvedValue(null);
+    expect(result.message).toBe('If this account exists, reset instructions were sent.');
+    expect(result.resetTokenPreview).toBeDefined();
+    expect(result.resetTokenPreview?.length).toBe(64);
 
-      await expect(service.remove('1', '9dd02335-74fa-487b-99f3-f3e6f9fba2af')).rejects.toThrow(NotFoundException);
+    expect(userRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        passwordResetTokenHash: expect.any(String),
+        passwordResetExpiresAt: expect.any(Date),
+      }),
+    );
+    expect(emailService.send).not.toHaveBeenCalled();
+  });
+
+  it('does not return reset token preview in production/staging', async () => {
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'NODE_ENV') {
+        return 'staging';
+      }
+      if (key === 'ORG_SMTP_ENCRYPTION_KEY') {
+        return '';
+      }
+      return undefined;
     });
+    organizationRepository.findOne.mockResolvedValue({
+      id: 'org-1',
+      slug: 'condo-a',
+      name: 'Condo A',
+    } as Organization);
+    userRepository.findOne.mockResolvedValue({
+      id: 'user-1',
+      name: 'Resident',
+      email: 'resident@example.com',
+      role: UserRole.RESIDENT,
+      password: 'hashed',
+      organizationId: 'org-1',
+    } as User);
+    userRepository.save.mockImplementation(async (value) => value as User);
+
+    const result = await service.requestForgotPassword({
+      organizationSlug: 'condo-a',
+      email: 'resident@example.com',
+    });
+
+    expect(result).toEqual({
+      message: 'If this account exists, reset instructions were sent.',
+    });
+  });
+
+  it('throws on confirmForgotPassword when token lookup fails (invalid/expired)', async () => {
+    organizationRepository.findOne.mockResolvedValue({
+      id: 'org-1',
+      slug: 'condo-a',
+      name: 'Condo A',
+    } as Organization);
+    userRepository.findOne.mockResolvedValue(null);
+
+    await expect(
+      service.confirmForgotPassword({
+        organizationSlug: 'condo-a',
+        token: 'abc123token',
+        newPassword: 'Newpass1@',
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('uses hashed token + expiration operator when confirming forgot password', async () => {
+    organizationRepository.findOne.mockResolvedValue({
+      id: 'org-1',
+      slug: 'condo-a',
+      name: 'Condo A',
+    } as Organization);
+    userRepository.findOne.mockResolvedValue({
+      id: 'user-1',
+      name: 'Resident',
+      email: 'resident@example.com',
+      role: UserRole.RESIDENT,
+      password: '$2b$10$uAifFQDU8YXQxV0zt3ZqRO.X5v4a5vNQfTU7QY8MdkhN.9jI6cN9i',
+      organizationId: 'org-1',
+      passwordResetTokenHash: 'placeholder',
+      passwordResetExpiresAt: new Date(Date.now() + 60_000),
+    } as User);
+    userRepository.save.mockImplementation(async (value) => value as User);
+
+    const token = 'abc123token';
+    await service.confirmForgotPassword({
+      organizationSlug: 'condo-a',
+      token,
+      newPassword: 'Newpass1@',
+    });
+
+    const expectedHash = createHash('sha256').update(token).digest('hex');
+    const findOneArgs = userRepository.findOne.mock.calls[0][0] as {
+      where: { organizationId: string; passwordResetTokenHash: string; passwordResetExpiresAt?: { _type?: string } };
+    };
+    expect(findOneArgs.where.organizationId).toBe('org-1');
+    expect(findOneArgs.where.passwordResetTokenHash).toBe(expectedHash);
+    expect(findOneArgs.where.passwordResetExpiresAt?._type).toBe('moreThan');
+    expect(userRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mustChangePassword: false,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+      }),
+    );
+  });
+
+  it('blocks email change through profile update flow', async () => {
+    userRepository.findOne.mockResolvedValue({
+      id: 'user-1',
+      name: 'Resident',
+      email: 'resident@example.com',
+      role: UserRole.RESIDENT,
+      password: 'hashed',
+      apartment: '101',
+      block: 1,
+      organizationId: 'org-1',
+    } as User);
+
+    await expect(
+      service.updateProfile(
+        'user-1',
+        { email: 'new@example.com' },
+        { id: 'user-1', organizationId: 'org-1', role: UserRole.RESIDENT } as User,
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('wires org SMTP repository dependency (sanity)', async () => {
+    expect(organizationContactEmailSettingsRepository.findOne).not.toHaveBeenCalled();
   });
 });

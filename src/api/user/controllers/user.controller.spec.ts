@@ -4,7 +4,7 @@ import { UserService } from '../services/user.service';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { User, UserRole } from '../entities/user.entity';
-import { ForbiddenException, GoneException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, GoneException } from '@nestjs/common';
 
 describe('UserController', () => {
   let controller: UserController;
@@ -19,8 +19,15 @@ describe('UserController', () => {
           useValue: {
             getProfile: jest.fn(),
             updateProfile: jest.fn(),
+            updateUserById: jest.fn(),
             getAllUsers: jest.fn(),
             remove: jest.fn(),
+            requestForgotPassword: jest.fn(),
+            confirmForgotPassword: jest.fn(),
+            setOnboardingEmail: jest.fn(),
+            verifyOnboardingEmail: jest.fn(),
+            changeOnboardingPassword: jest.fn(),
+            changePassword: jest.fn(),
           },
         },
       ],
@@ -66,8 +73,8 @@ describe('UserController', () => {
         block: 1,
         role: UserRole.RESIDENT,
       };
-      const result = { message: 'User profile retrieved successfully', user };
-      jest.spyOn(service, 'getProfile').mockResolvedValue(result);
+      const result = { message: 'User profile retrieved successfully', user, onboarding: {} };
+      jest.spyOn(service, 'getProfile').mockResolvedValue(result as any);
 
       expect(await controller.getProfile(user)).toBe(result);
     });
@@ -85,19 +92,53 @@ describe('UserController', () => {
         role: UserRole.RESIDENT,
       };
       const updateUserDto: UpdateUserDto = {
-        email: 'newemail@example.com',
-        apartment: '102',
+        name: 'new name',
       };
       const updatedUser: User = {
         ...user,
-        email: 'newemail@example.com',
-        apartment: '102',
+        name: 'new name',
       };
-      const result = { message: 'User profile updated successfully', user: updatedUser };
-      jest.spyOn(service, 'updateProfile').mockResolvedValue(updatedUser as any);
+      const result = { message: 'User profile updated successfully', user: updatedUser, onboarding: {} };
+      jest.spyOn(service, 'updateProfile').mockResolvedValue(result as any);
       const req = { user } as any;
 
-      expect(await controller.updateProfile(req, updateUserDto)).toEqual(result);
+      expect(await controller.updateProfile(req, updateUserDto)).toEqual(result as any);
+    });
+
+    it('should reject password change via profile endpoint', async () => {
+      const user: User = {
+        id: '1',
+        name: 'testuser',
+        password: 'hashedpassword',
+        email: 'testuser@example.com',
+        apartment: '101',
+        block: 1,
+        role: UserRole.RESIDENT,
+      };
+      const req = { user } as any;
+      await expect(
+        controller.updateProfile(req, {
+          password: 'Newpass123',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject email change via profile endpoint', async () => {
+      const user: User = {
+        id: '1',
+        name: 'testuser',
+        password: 'hashedpassword',
+        email: 'testuser@example.com',
+        apartment: '101',
+        block: 1,
+        role: UserRole.RESIDENT,
+      };
+      const req = { user } as any;
+      await expect(
+        controller.updateProfile(req, {
+          email: 'newemail@example.com',
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -113,7 +154,7 @@ describe('UserController', () => {
         role: UserRole.RESIDENT,
       }];
       const result = { message: 'All users retrieved successfully', users };
-      jest.spyOn(service, 'getAllUsers').mockResolvedValue(result);
+      jest.spyOn(service, 'getAllUsers').mockResolvedValue(result as any);
 
       expect(await controller.getAllUsers({ organizationId: 'org-1' } as any)).toBe(result);
     });
@@ -149,6 +190,71 @@ describe('UserController', () => {
       };
 
       await expect(controller.remove(currentUser, '1')).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('onboarding endpoints', () => {
+    it('should set onboarding email for resident', async () => {
+      const response = { message: 'Verification token generated' };
+      jest.spyOn(service, 'setOnboardingEmail').mockResolvedValue(response as any);
+
+      await expect(
+        controller.setOnboardingEmail(
+          { id: 'resident-1', organizationId: 'org-1', role: UserRole.RESIDENT } as any,
+          { email: 'resident@example.com' },
+        ),
+      ).resolves.toEqual(response);
+    });
+
+    it('should verify onboarding email', async () => {
+      const response = { message: 'Email verified successfully' };
+      jest.spyOn(service, 'verifyOnboardingEmail').mockResolvedValue(response as any);
+
+      await expect(
+        controller.verifyOnboardingEmail(
+          { id: 'resident-1', organizationId: 'org-1', role: UserRole.RESIDENT } as any,
+          { token: 'a'.repeat(32) },
+        ),
+      ).resolves.toEqual(response);
+    });
+
+    it('should change onboarding password', async () => {
+      const response = { message: 'Password updated successfully' };
+      jest.spyOn(service, 'changeOnboardingPassword').mockResolvedValue(response as any);
+
+      await expect(
+        controller.changeOnboardingPassword(
+          { id: 'resident-1', organizationId: 'org-1', role: UserRole.RESIDENT } as any,
+          { currentPassword: 'Password1', newPassword: 'Password2' },
+        ),
+      ).resolves.toEqual(response);
+    });
+  });
+
+  describe('forgot-password endpoints', () => {
+    it('should request forgot password', async () => {
+      const response = { message: 'If this account exists, reset instructions were sent.' };
+      jest.spyOn(service, 'requestForgotPassword').mockResolvedValue(response as any);
+
+      await expect(
+        controller.requestForgotPassword({
+          organizationSlug: 'my-condo',
+          email: 'resident@example.com',
+        }),
+      ).resolves.toEqual(response);
+    });
+
+    it('should confirm forgot password', async () => {
+      const response = { message: 'Password reset successfully' };
+      jest.spyOn(service, 'confirmForgotPassword').mockResolvedValue(response as any);
+
+      await expect(
+        controller.confirmForgotPassword({
+          organizationSlug: 'my-condo',
+          token: 'a'.repeat(64),
+          newPassword: 'Password2@',
+        }),
+      ).resolves.toEqual(response);
     });
   });
 });
