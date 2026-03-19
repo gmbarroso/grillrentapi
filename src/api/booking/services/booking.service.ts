@@ -402,18 +402,24 @@ export class BookingService {
     if (resourceType === 'daily') {
       const bookings = await this.bookingRepository.find({
         where: { resource: { type: resourceType }, organizationId },
-        relations: ['resource'],
+        relations: ['resource', 'user'],
       });
 
-      const reservedDays = Array.from(
-        new Set(
-          bookings.map(booking => {
-            const [dayStartUtc] = this.getSaoPauloUtcDayRangeForInstant(new Date(booking.startTime));
-            return dayStartUtc.toISOString().split('T')[0];
-          }),
-        ),
-      );
-      return { reservedDays };
+      const reservedDayDetails: Record<string, { userId: string | null; userApartment: string | null; userBlock: number | null; bookedOnBehalf: string | null }> = {};
+
+      bookings.forEach(booking => {
+        const [dayStartUtc] = this.getSaoPauloUtcDayRangeForInstant(new Date(booking.startTime));
+        const dayKey = dayStartUtc.toISOString().split('T')[0];
+        reservedDayDetails[dayKey] = {
+          userId: booking.userId ?? null,
+          userApartment: booking.user?.apartment ?? null,
+          userBlock: booking.user?.block ?? null,
+          bookedOnBehalf: booking.bookedOnBehalf ?? null,
+        };
+      });
+
+      const reservedDays = Object.keys(reservedDayDetails);
+      return { reservedDays, reservedDayDetails };
     }
 
     if (!date) {
@@ -426,6 +432,7 @@ export class BookingService {
     const bookings = await this.bookingRepository
       .createQueryBuilder('booking')
       .leftJoinAndSelect('booking.resource', 'resource')
+      .leftJoinAndSelect('booking.user', 'user')
       .where('resource.type = :resourceType', { resourceType })
       .andWhere('booking.organizationId = :organizationId', { organizationId })
       .andWhere('booking.startTime < :endOfLocalDayUtcExclusive', { endOfLocalDayUtcExclusive })
@@ -435,6 +442,10 @@ export class BookingService {
     const reservedTimes = bookings.map(booking => ({
       startTime: this.toUtcIsoString(booking.startTime),
       endTime: this.toUtcIsoString(booking.endTime),
+      userId: booking.userId ?? null,
+      userApartment: booking.user?.apartment ?? null,
+      userBlock: booking.user?.block ?? null,
+      bookedOnBehalf: booking.bookedOnBehalf ?? null,
     }));
 
     return { reservedTimes };
