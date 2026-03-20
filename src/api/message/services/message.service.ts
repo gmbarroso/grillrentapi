@@ -11,10 +11,18 @@ import { Message, MessageEmailDeliveryStatus } from '../entities/message.entity'
 import { MessageReply } from '../entities/message-reply.entity';
 import { ContactEmailSettingsService } from './contact-email-settings.service';
 import { IngestInboundEmailReplyDto } from '../dto/ingest-inbound-email-reply.dto';
+import { EmailReplyTokenService } from './email-reply-token.service';
 
 interface MessageUnreadState {
   unreadCount: number;
   hasUnread: boolean;
+}
+
+interface ResolvedInboundThread {
+  messageId: string;
+  organizationId: string;
+  expectedSenderEmail: string | null;
+  resolutionMethod: 'header' | 'reply_token' | 'direct_payload';
 }
 
 @Injectable()
@@ -31,6 +39,7 @@ export class MessageService {
     private readonly emailService: EmailService,
     private readonly contactEmailSettingsService: ContactEmailSettingsService,
     private readonly configService: ConfigService,
+    private readonly emailReplyTokenService: EmailReplyTokenService,
   ) {}
 
   async createFromContact(
@@ -374,20 +383,37 @@ export class MessageService {
       throw new ForbiddenException('Invalid inbound email secret');
     }
 
+    const normalizedFrom = data.fromEmail.trim().toLowerCase();
+    const resolvedThread = await this.resolveInboundThread(data);
+    if (!resolvedThread) {
+      return { created: false, reason: 'thread_not_found', replyId: null };
+    }
+    if (resolvedThread === 'invalid_reply_token') {
+      return { created: false, reason: 'invalid_reply_token', replyId: null };
+    }
+
     const message = await this.messageRepository.findOne({
       where: {
-        id: data.messageId,
-        organizationId: data.organizationId,
+        id: resolvedThread.messageId,
+        organizationId: resolvedThread.organizationId,
       },
     });
 
     if (!message) {
-      return { created: false, reason: 'message_not_found', replyId: null };
+      return { created: false, reason: 'thread_not_found', replyId: null };
     }
 
-    const normalizedFrom = data.fromEmail.trim().toLowerCase();
-    const normalizedSender = (message.senderEmail || '').trim().toLowerCase();
-    if (!normalizedSender || normalizedFrom !== normalizedSender) {
+    const normalizedMessageSender = (message.senderEmail || '').trim().toLowerCase();
+    if (
+      resolvedThread.expectedSenderEmail
+      && normalizedMessageSender
+      && resolvedThread.expectedSenderEmail !== normalizedMessageSender
+    ) {
+      return { created: false, reason: 'invalid_reply_token', replyId: null };
+    }
+
+    const expectedSenderEmail = resolvedThread.expectedSenderEmail || normalizedMessageSender;
+    if (!expectedSenderEmail || normalizedFrom !== expectedSenderEmail) {
       return { created: false, reason: 'sender_mismatch', replyId: null };
     }
 
@@ -488,7 +514,7 @@ export class MessageService {
       subject: `[Resposta] ${message.subject}`,
       text: this.composeResidentReplyEmail(message, reply),
       from: config.from || undefined,
-      replyTo: config.replyTo || undefined,
+      replyTo: this.buildSignedReplyToAddress(message, config.replyTo, config.smtp?.from),
       inReplyTo: residentThreadLatest || undefined,
       references: this.composeReferences(residentThreadRoot, residentThreadLatest),
       headers: {
@@ -531,7 +557,7 @@ export class MessageService {
       subject: `[Contato][Resposta Morador] ${message.subject}`,
       text: this.composeAdminResidentReplyEmail(message, reply),
       from: config.from || undefined,
-      replyTo: config.replyTo || undefined,
+      replyTo: this.buildSignedReplyToAddress(message, config.replyTo, config.smtp?.from),
       inReplyTo: adminThreadLatest || adminThreadRoot || undefined,
       references: this.composeReferences(adminThreadRoot, adminThreadLatest),
       headers: {
@@ -576,7 +602,7 @@ export class MessageService {
         to: config.recipients,
         from: config.from || undefined,
         subject: `[Contato] ${this.categoryLabel(message.category)} - ${message.subject}`,
-        replyTo: config.replyTo || undefined,
+        replyTo: this.buildSignedReplyToAddress(message, config.replyTo, config.smtp?.from),
         text: this.composeAdminMessageEmail(message),
         headers: {
           'X-GrillRent-Message-Id': message.id,
@@ -610,6 +636,182 @@ export class MessageService {
         deliveryMode: 'in_app_and_email',
         reason,
       };
+    }
+  }
+
+  private async resolveInboundThread(
+    data: IngestInboundEmailReplyDto,
+  ): Promise<ResolvedInboundThread | 'invalid_reply_token' | null> {
+    const threadMessageIds = this.normalizeProviderMessageIds(data.threadMessageIds || []);
+    if (threadMessageIds.length) {
+      const headerMatch = await this.resolveMessageThreadByProviderIds(threadMessageIds);
+      if (headerMatch) {
+        return {
+          ...headerMatch,
+          resolutionMethod: 'header',
+        };
+      }
+    }
+
+    const replyTokenResult = this.resolveThreadByReplyToken(data);
+    if (replyTokenResult === 'invalid_reply_token') {
+      return 'invalid_reply_token';
+    }
+    if (replyTokenResult) {
+      return replyTokenResult;
+    }
+
+    if (data.organizationId && data.messageId) {
+      return {
+        organizationId: data.organizationId,
+        messageId: data.messageId,
+        expectedSenderEmail: null,
+        resolutionMethod: 'direct_payload',
+      };
+    }
+
+    return null;
+  }
+
+  private resolveThreadByReplyToken(
+    data: IngestInboundEmailReplyDto,
+  ): ResolvedInboundThread | 'invalid_reply_token' | null {
+    const tokenCandidates = this.collectReplyTokenCandidates(data);
+    if (!tokenCandidates.length) {
+      return null;
+    }
+
+    let sawInvalidToken = false;
+    for (const token of tokenCandidates) {
+      const verification = this.emailReplyTokenService.verifyReplyToken(token);
+      if (!verification.valid) {
+        sawInvalidToken = true;
+        continue;
+      }
+
+      return {
+        messageId: verification.payload.messageId,
+        organizationId: verification.payload.organizationId,
+        expectedSenderEmail: verification.payload.senderEmail,
+        resolutionMethod: 'reply_token',
+      };
+    }
+
+    return sawInvalidToken ? 'invalid_reply_token' : null;
+  }
+
+  private collectReplyTokenCandidates(data: IngestInboundEmailReplyDto): string[] {
+    const allRecipients = [
+      ...(data.toRecipients || []),
+      ...(data.deliveredToRecipients || []),
+      ...(data.xOriginalToRecipients || []),
+    ];
+
+    const extractedTokens = allRecipients
+      .map((recipient) => this.emailReplyTokenService.extractTokenFromReplyAddress(recipient))
+      .filter((value): value is string => Boolean(value && value.trim()));
+
+    return Array.from(new Set(extractedTokens));
+  }
+
+  private async resolveMessageThreadByProviderIds(providerIds: string[]): Promise<ResolvedInboundThread | null> {
+    if (!providerIds.length) {
+      return null;
+    }
+
+    const rows = await this.messageRepository.query(
+      `
+        with normalized_candidates as (
+          select unnest($1::text[]) as candidate
+        ),
+        direct_match as (
+          select
+            m.id as "messageId",
+            m."organizationId" as "organizationId",
+            m."senderEmail" as "senderEmail",
+            1 as priority
+          from message m
+          join normalized_candidates c
+            on regexp_replace(lower(coalesce(m."adminEmailProviderMessageId", '')), '[<>]', '', 'g') = c.candidate
+        ),
+        reply_match as (
+          select
+            m.id as "messageId",
+            m."organizationId" as "organizationId",
+            m."senderEmail" as "senderEmail",
+            2 as priority
+          from message_reply mr
+          join message m on m.id = mr."messageId"
+          join normalized_candidates c
+            on regexp_replace(lower(coalesce(mr."emailProviderMessageId", '')), '[<>]', '', 'g') = c.candidate
+        )
+        select "messageId", "organizationId", "senderEmail"
+        from (
+          select * from direct_match
+          union all
+          select * from reply_match
+        ) matches
+        order by priority asc
+        limit 1
+      `,
+      [providerIds],
+    );
+
+    const match = rows?.[0];
+    if (!match?.messageId || !match?.organizationId) {
+      return null;
+    }
+
+    return {
+      messageId: match.messageId,
+      organizationId: match.organizationId,
+      expectedSenderEmail: match.senderEmail ? String(match.senderEmail).trim().toLowerCase() : null,
+      resolutionMethod: 'header',
+    };
+  }
+
+  private normalizeProviderMessageIds(values: string[]): string[] {
+    const normalized = values
+      .map((value) => value.trim().toLowerCase().replace(/^<+|>+$/g, ''))
+      .filter(Boolean);
+
+    return Array.from(new Set(normalized));
+  }
+
+  private buildSignedReplyToAddress(
+    message: Message,
+    configuredReplyTo: string | null,
+    smtpFrom?: string | null,
+  ): string | undefined {
+    const configuredReply = configuredReplyTo?.trim().toLowerCase() || null;
+    const configuredSmtpFrom = smtpFrom?.trim().toLowerCase() || null;
+    const envMailbox = (this.configService.get<string>('CONTACT_EMAIL_REPLY_BASE_ADDRESS') || '').trim().toLowerCase();
+    const replyMailbox = envMailbox || configuredSmtpFrom || configuredReply;
+
+    if (!replyMailbox) {
+      return configuredReply || undefined;
+    }
+    if (!message.organizationId || !message.senderEmail) {
+      return configuredReply || undefined;
+    }
+
+    try {
+      const token = this.emailReplyTokenService.generateReplyToken({
+        messageId: message.id,
+        organizationId: message.organizationId,
+        senderEmail: message.senderEmail,
+      });
+      return this.emailReplyTokenService.buildReplyToAddress(replyMailbox, token);
+    } catch (error) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'reply_token_generation_failed',
+          messageId: message.id,
+          organizationId: message.organizationId || null,
+          reason: error instanceof Error ? this.trimError(error.message) : 'unknown_error',
+        }),
+      );
+      return configuredReply || undefined;
     }
   }
 
