@@ -377,6 +377,54 @@ describe('MessageService', () => {
     });
   });
 
+  it('falls back to direct payload when token is invalid but organizationId/messageId is provided', async () => {
+    const expiredToken = emailReplyTokenService.generateReplyToken({
+      messageId: '11111111-1111-4111-8111-111111111111',
+      organizationId: '22222222-2222-4222-8222-222222222222',
+      senderEmail: 'resident@example.com',
+      exp: Math.floor(Date.now() / 1000) - 30,
+    });
+    const replyTo = emailReplyTokenService.buildReplyToAddress('faleconosco@example.com', expiredToken);
+
+    jest.spyOn(messageRepository, 'findOne').mockResolvedValue({
+      id: 'msg-fallback',
+      organizationId: 'org-fallback',
+      senderEmail: 'resident@example.com',
+      senderUserId: 'resident-1',
+      senderName: 'Resident',
+      replies: [],
+    } as any);
+    jest.spyOn(messageReplyRepository, 'findOne').mockResolvedValue(null as any);
+    jest.spyOn(messageReplyRepository, 'create').mockImplementation((value) => value as any);
+    jest.spyOn(messageReplyRepository, 'save')
+      .mockResolvedValueOnce({ id: 'reply-fallback' } as any)
+      .mockResolvedValueOnce({ id: 'reply-fallback' } as any);
+    jest.spyOn(messageRepository, 'update').mockResolvedValue({} as any);
+    contactEmailSettingsService.resolveDeliveryConfig.mockResolvedValue({
+      shouldSend: false,
+      deliveryMode: 'in_app_only',
+      reason: 'Delivery mode is in_app_only',
+      validationErrors: [],
+    });
+
+    await expect(
+      service.ingestInboundEmailReply(
+        {
+          organizationId: 'org-fallback',
+          messageId: 'msg-fallback',
+          fromEmail: 'resident@example.com',
+          content: 'reply',
+          toRecipients: [replyTo],
+        } as any,
+        'expected-secret',
+      ),
+    ).resolves.toEqual({
+      created: true,
+      reason: null,
+      replyId: 'reply-fallback',
+    });
+  });
+
   it('returns sender_mismatch when reply sender does not match expected resident', async () => {
     jest.spyOn(messageRepository, 'query').mockResolvedValue([
       {

@@ -3,12 +3,20 @@ import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'crypto';
 
 const DEFAULT_TTL_HOURS = 720;
+const COMPACT_TOKEN_MAC_BYTES_LENGTH = 10;
+const COMPACT_TOKEN_BYTES_LENGTH = 16 + 4 + COMPACT_TOKEN_MAC_BYTES_LENGTH;
 
 export interface EmailReplyTokenPayload {
   messageId: string;
   organizationId: string;
   senderEmail: string;
   exp: number;
+}
+
+interface CompactReplyTokenPayload {
+  messageId: string;
+  exp: number;
+  mac: Buffer;
 }
 
 type EmailReplyTokenVerificationResult =
@@ -25,20 +33,44 @@ export class EmailReplyTokenService {
     senderEmail: string;
     exp?: number;
   }): string {
-    const payload: EmailReplyTokenPayload = {
+    const normalizedSenderEmail = input.senderEmail.trim().toLowerCase();
+    const exp = input.exp ?? this.resolveDefaultExpirationEpochSeconds();
+    const messageIdBytes = this.uuidToBytes(input.messageId);
+    const expBytes = Buffer.alloc(4);
+    expBytes.writeUInt32BE(exp, 0);
+    const mac = this.computeCompactMac({
       messageId: input.messageId,
       organizationId: input.organizationId,
-      senderEmail: input.senderEmail.trim().toLowerCase(),
-      exp: input.exp ?? this.resolveDefaultExpirationEpochSeconds(),
-    };
+      senderEmail: normalizedSenderEmail,
+      exp,
+    });
 
-    const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
-    const signature = this.sign(encodedPayload);
-    return `${encodedPayload}.${signature}`;
+    const tokenBytes = Buffer.concat([messageIdBytes, expBytes, mac]);
+    return tokenBytes.toString('base64url');
   }
 
   verifyReplyToken(token: string): EmailReplyTokenVerificationResult {
     const normalizedToken = token.trim();
+    const compact = this.decodeCompactReplyToken(normalizedToken);
+    if (compact.valid) {
+      return {
+        valid: true,
+        payload: {
+          messageId: compact.payload.messageId,
+          organizationId: '',
+          senderEmail: '',
+          exp: compact.payload.exp,
+        },
+      };
+    }
+    if (compact.reason === 'expired') {
+      return { valid: false, reason: 'expired' };
+    }
+    if (!normalizedToken.includes('.')) {
+      return { valid: false, reason: 'invalid' };
+    }
+
+    // Legacy format support for already-sent outbound emails.
     const split = normalizedToken.split('.');
     if (split.length !== 2) {
       return { valid: false, reason: 'invalid' };
@@ -85,27 +117,59 @@ export class EmailReplyTokenService {
       throw new Error('Invalid reply mailbox address');
     }
 
-    const encodedToken = Buffer.from(token, 'utf8').toString('base64url');
-    return `${localPart}+grillrent.${encodedToken}@${domain}`;
+    const plusLocalPart = `${localPart}+grillrent.${token}`;
+    if (plusLocalPart.length > 64) {
+      throw new Error('Reply token local-part exceeds 64 characters');
+    }
+
+    return `${plusLocalPart}@${domain}`;
   }
 
   extractTokenFromReplyAddress(address: string): string | null {
-    const normalizedAddress = address.trim();
-    const [localPart] = normalizedAddress.split('@');
+    const mailbox = this.extractMailboxAddress(address);
+    if (!mailbox) {
+      return null;
+    }
+
+    const atIndex = mailbox.lastIndexOf('@');
+    if (atIndex === -1) {
+      return null;
+    }
+
+    const localPart = mailbox.slice(0, atIndex);
     if (!localPart) {
       return null;
     }
 
-    const match = localPart.match(/\+grillrent\.([A-Za-z0-9_-]+)$/);
+    const match = localPart.match(/\+grillrent\.([A-Za-z0-9._-]+)$/i);
     if (!match?.[1]) {
       return null;
     }
 
-    try {
-      return Buffer.from(match[1], 'base64url').toString('utf8');
-    } catch {
-      return null;
+    return match[1];
+  }
+
+  verifyCompactTokenAgainstContext(
+    token: string,
+    context: { organizationId: string; senderEmail: string },
+  ): { valid: true; messageId: string } | { valid: false; reason: 'invalid' | 'expired' } {
+    const decoded = this.decodeCompactReplyToken(token);
+    if (!decoded.valid) {
+      return decoded;
     }
+
+    const expectedMac = this.computeCompactMac({
+      messageId: decoded.payload.messageId,
+      organizationId: context.organizationId,
+      senderEmail: context.senderEmail.trim().toLowerCase(),
+      exp: decoded.payload.exp,
+    });
+
+    if (!this.buffersEqual(expectedMac, decoded.payload.mac)) {
+      return { valid: false, reason: 'invalid' };
+    }
+
+    return { valid: true, messageId: decoded.payload.messageId };
   }
 
   private sign(payload: string): string {
@@ -117,10 +181,14 @@ export class EmailReplyTokenService {
   private signaturesEqual(expected: string, provided: string): boolean {
     const expectedBuffer = Buffer.from(expected, 'utf8');
     const providedBuffer = Buffer.from(provided, 'utf8');
-    if (expectedBuffer.length !== providedBuffer.length) {
+    return this.buffersEqual(expectedBuffer, providedBuffer);
+  }
+
+  private buffersEqual(expected: Buffer, provided: Buffer): boolean {
+    if (expected.length !== provided.length) {
       return false;
     }
-    return timingSafeEqual(expectedBuffer, providedBuffer);
+    return timingSafeEqual(expected, provided);
   }
 
   private resolveSecret(): string {
@@ -157,5 +225,99 @@ export class EmailReplyTokenService {
       && typeof candidate.exp === 'number'
       && Number.isFinite(candidate.exp)
     );
+  }
+
+  private decodeCompactReplyToken(
+    token: string,
+  ): { valid: true; payload: CompactReplyTokenPayload } | { valid: false; reason: 'invalid' | 'expired' } {
+    let tokenBytes: Buffer;
+    try {
+      tokenBytes = Buffer.from(token, 'base64url');
+    } catch {
+      return { valid: false, reason: 'invalid' };
+    }
+
+    if (tokenBytes.length !== COMPACT_TOKEN_BYTES_LENGTH) {
+      return { valid: false, reason: 'invalid' };
+    }
+
+    const messageIdBytes = tokenBytes.subarray(0, 16);
+    const expBytes = tokenBytes.subarray(16, 20);
+    const mac = tokenBytes.subarray(20, 20 + COMPACT_TOKEN_MAC_BYTES_LENGTH);
+
+    const exp = expBytes.readUInt32BE(0);
+    if (exp <= Math.floor(Date.now() / 1000)) {
+      return { valid: false, reason: 'expired' };
+    }
+
+    let messageId: string;
+    try {
+      messageId = this.bytesToUuid(messageIdBytes);
+    } catch {
+      return { valid: false, reason: 'invalid' };
+    }
+
+    return {
+      valid: true,
+      payload: {
+        messageId,
+        exp,
+        mac,
+      },
+    };
+  }
+
+  private computeCompactMac(input: {
+    messageId: string;
+    organizationId: string;
+    senderEmail: string;
+    exp: number;
+  }): Buffer {
+    const body = `${input.messageId}|${input.organizationId}|${input.senderEmail}|${input.exp}`;
+    return createHmac('sha256', this.resolveSecret())
+      .update(body, 'utf8')
+      .digest()
+      .subarray(0, COMPACT_TOKEN_MAC_BYTES_LENGTH);
+  }
+
+  private uuidToBytes(value: string): Buffer {
+    const normalized = value.replace(/-/g, '');
+    if (!/^[0-9a-fA-F]{32}$/.test(normalized)) {
+      throw new Error('Invalid UUID');
+    }
+    return Buffer.from(normalized, 'hex');
+  }
+
+  private bytesToUuid(value: Buffer): string {
+    if (value.length !== 16) {
+      throw new Error('Invalid UUID bytes');
+    }
+    const hex = value.toString('hex');
+    return [
+      hex.slice(0, 8),
+      hex.slice(8, 12),
+      hex.slice(12, 16),
+      hex.slice(16, 20),
+      hex.slice(20, 32),
+    ].join('-');
+  }
+
+  private extractMailboxAddress(value: string): string | null {
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const angleMatch = normalized.match(/<([^<>@\s]+@[^<>@\s]+)>/);
+    if (angleMatch?.[1]) {
+      return angleMatch[1].trim();
+    }
+
+    const mailboxMatch = normalized.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/);
+    if (mailboxMatch?.[0]) {
+      return mailboxMatch[0].trim();
+    }
+
+    return null;
   }
 }

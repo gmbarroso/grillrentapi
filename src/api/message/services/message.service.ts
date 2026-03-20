@@ -514,7 +514,7 @@ export class MessageService {
       subject: `[Resposta] ${message.subject}`,
       text: this.composeResidentReplyEmail(message, reply),
       from: config.from || undefined,
-      replyTo: this.buildSignedReplyToAddress(message, config.replyTo, config.smtp?.from),
+      replyTo: this.buildSignedReplyToAddress(message, config.replyTo),
       inReplyTo: residentThreadLatest || undefined,
       references: this.composeReferences(residentThreadRoot, residentThreadLatest),
       headers: {
@@ -557,7 +557,7 @@ export class MessageService {
       subject: `[Contato][Resposta Morador] ${message.subject}`,
       text: this.composeAdminResidentReplyEmail(message, reply),
       from: config.from || undefined,
-      replyTo: this.buildSignedReplyToAddress(message, config.replyTo, config.smtp?.from),
+      replyTo: this.buildSignedReplyToAddress(message, config.replyTo),
       inReplyTo: adminThreadLatest || adminThreadRoot || undefined,
       references: this.composeReferences(adminThreadRoot, adminThreadLatest),
       headers: {
@@ -602,7 +602,7 @@ export class MessageService {
         to: config.recipients,
         from: config.from || undefined,
         subject: `[Contato] ${this.categoryLabel(message.category)} - ${message.subject}`,
-        replyTo: this.buildSignedReplyToAddress(message, config.replyTo, config.smtp?.from),
+        replyTo: this.buildSignedReplyToAddress(message, config.replyTo),
         text: this.composeAdminMessageEmail(message),
         headers: {
           'X-GrillRent-Message-Id': message.id,
@@ -653,15 +653,17 @@ export class MessageService {
       }
     }
 
-    const replyTokenResult = this.resolveThreadByReplyToken(data);
+    const hasDirectPayload = Boolean(data.organizationId && data.messageId);
+    const replyTokenResult = await this.resolveThreadByReplyToken(data);
     if (replyTokenResult === 'invalid_reply_token') {
-      return 'invalid_reply_token';
-    }
-    if (replyTokenResult) {
+      if (!hasDirectPayload) {
+        return 'invalid_reply_token';
+      }
+    } else if (replyTokenResult) {
       return replyTokenResult;
     }
 
-    if (data.organizationId && data.messageId) {
+    if (hasDirectPayload && data.organizationId && data.messageId) {
       return {
         organizationId: data.organizationId,
         messageId: data.messageId,
@@ -673,9 +675,9 @@ export class MessageService {
     return null;
   }
 
-  private resolveThreadByReplyToken(
+  private async resolveThreadByReplyToken(
     data: IngestInboundEmailReplyDto,
-  ): ResolvedInboundThread | 'invalid_reply_token' | null {
+  ): Promise<ResolvedInboundThread | 'invalid_reply_token' | null> {
     const tokenCandidates = this.collectReplyTokenCandidates(data);
     if (!tokenCandidates.length) {
       return null;
@@ -683,16 +685,41 @@ export class MessageService {
 
     let sawInvalidToken = false;
     for (const token of tokenCandidates) {
-      const verification = this.emailReplyTokenService.verifyReplyToken(token);
-      if (!verification.valid) {
+      const decoded = this.emailReplyTokenService.verifyReplyToken(token);
+      if (!decoded.valid) {
+        sawInvalidToken = true;
+        continue;
+      }
+
+      if (decoded.payload.organizationId && decoded.payload.senderEmail) {
+        return {
+          messageId: decoded.payload.messageId,
+          organizationId: decoded.payload.organizationId,
+          expectedSenderEmail: decoded.payload.senderEmail,
+          resolutionMethod: 'reply_token',
+        };
+      }
+
+      const message = await this.messageRepository.findOne({
+        where: { id: decoded.payload.messageId },
+      });
+      if (!message?.organizationId || !message.senderEmail) {
+        continue;
+      }
+
+      const verified = this.emailReplyTokenService.verifyCompactTokenAgainstContext(token, {
+        organizationId: message.organizationId,
+        senderEmail: message.senderEmail,
+      });
+      if (!verified.valid) {
         sawInvalidToken = true;
         continue;
       }
 
       return {
-        messageId: verification.payload.messageId,
-        organizationId: verification.payload.organizationId,
-        expectedSenderEmail: verification.payload.senderEmail,
+        messageId: message.id,
+        organizationId: message.organizationId,
+        expectedSenderEmail: message.senderEmail.trim().toLowerCase(),
         resolutionMethod: 'reply_token',
       };
     }
@@ -781,14 +808,10 @@ export class MessageService {
   private buildSignedReplyToAddress(
     message: Message,
     configuredReplyTo: string | null,
-    smtpFrom?: string | null,
   ): string | undefined {
     const configuredReply = configuredReplyTo?.trim().toLowerCase() || null;
-    const configuredSmtpFrom = smtpFrom?.trim().toLowerCase() || null;
     const envMailbox = (this.configService.get<string>('CONTACT_EMAIL_REPLY_BASE_ADDRESS') || '').trim().toLowerCase();
-    const replyMailbox = envMailbox || configuredSmtpFrom || configuredReply;
-
-    if (!replyMailbox) {
+    if (!envMailbox) {
       return configuredReply || undefined;
     }
     if (!message.organizationId || !message.senderEmail) {
@@ -801,7 +824,7 @@ export class MessageService {
         organizationId: message.organizationId,
         senderEmail: message.senderEmail,
       });
-      return this.emailReplyTokenService.buildReplyToAddress(replyMailbox, token);
+      return this.emailReplyTokenService.buildReplyToAddress(envMailbox, token);
     } catch (error) {
       this.logger.warn(
         JSON.stringify({

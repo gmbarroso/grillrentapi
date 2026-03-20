@@ -75,6 +75,7 @@ $ npm run test:cov
 - Segurança:
   - Token HMAC-SHA256 com `CONTACT_EMAIL_REPLY_TOKEN_SECRET`.
   - Expiração via `CONTACT_EMAIL_REPLY_TOKEN_TTL_HOURS` (ex: `720`).
+  - Base de reply-to obrigatório em `CONTACT_EMAIL_REPLY_BASE_ADDRESS`.
   - Validação estrita do remetente (`fromEmail`) contra o morador esperado.
 - Razões de recusa explícitas:
   - `thread_not_found`

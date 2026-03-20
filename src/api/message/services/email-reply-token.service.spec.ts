@@ -18,30 +18,43 @@ describe('EmailReplyTokenService', () => {
   });
 
   it('generates and verifies reply token', () => {
+    const messageId = '11111111-1111-4111-8111-111111111111';
+    const organizationId = '22222222-2222-4222-8222-222222222222';
+    const senderEmail = 'Resident@Example.com';
     const token = service.generateReplyToken({
-      messageId: '11111111-1111-4111-8111-111111111111',
-      organizationId: '22222222-2222-4222-8222-222222222222',
-      senderEmail: 'Resident@Example.com',
+      messageId,
+      organizationId,
+      senderEmail,
     });
 
-    const verification = service.verifyReplyToken(token);
-    expect(verification.valid).toBe(true);
-    if (!verification.valid) return;
+    expect(token.length).toBeLessThanOrEqual(43);
+    const decoded = service.verifyReplyToken(token);
+    expect(decoded.valid).toBe(true);
+    if (!decoded.valid) return;
+    expect(decoded.payload.messageId).toBe(messageId);
 
-    expect(verification.payload.messageId).toBe('11111111-1111-4111-8111-111111111111');
-    expect(verification.payload.organizationId).toBe('22222222-2222-4222-8222-222222222222');
-    expect(verification.payload.senderEmail).toBe('resident@example.com');
+    const verification = service.verifyCompactTokenAgainstContext(token, {
+      organizationId,
+      senderEmail,
+    });
+    expect(verification).toEqual({ valid: true, messageId });
   });
 
   it('rejects tampered token', () => {
+    const messageId = '11111111-1111-4111-8111-111111111111';
+    const organizationId = '22222222-2222-4222-8222-222222222222';
+    const senderEmail = 'resident@example.com';
     const token = service.generateReplyToken({
-      messageId: '11111111-1111-4111-8111-111111111111',
-      organizationId: '22222222-2222-4222-8222-222222222222',
-      senderEmail: 'resident@example.com',
+      messageId,
+      organizationId,
+      senderEmail,
     });
 
     const tampered = `${token.slice(0, -1)}x`;
-    const verification = service.verifyReplyToken(tampered);
+    const verification = service.verifyCompactTokenAgainstContext(tampered, {
+      organizationId,
+      senderEmail,
+    });
     expect(verification).toEqual({ valid: false, reason: 'invalid' });
   });
 
@@ -67,5 +80,6 @@ describe('EmailReplyTokenService', () => {
 
     expect(replyAddress.startsWith('faleconosco+grillrent.')).toBe(true);
     expect(service.extractTokenFromReplyAddress(replyAddress)).toBe(token);
+    expect(service.extractTokenFromReplyAddress(`"Contact" <${replyAddress}>`)).toBe(token);
   });
 });
