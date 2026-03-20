@@ -5,6 +5,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 const DEFAULT_TTL_HOURS = 720;
 const COMPACT_TOKEN_MAC_BYTES_LENGTH = 10;
 const COMPACT_TOKEN_BYTES_LENGTH = 16 + 4 + COMPACT_TOKEN_MAC_BYTES_LENGTH;
+const SHORT_PLUS_TAG = 'gr';
 
 export interface EmailReplyTokenPayload {
   messageId: string;
@@ -117,7 +118,7 @@ export class EmailReplyTokenService {
       throw new Error('Invalid reply mailbox address');
     }
 
-    const plusLocalPart = `${localPart}+grillrent.${token}`;
+    const plusLocalPart = `${localPart}+${SHORT_PLUS_TAG}.${token}`;
     if (plusLocalPart.length > 64) {
       throw new Error('Reply token local-part exceeds 64 characters');
     }
@@ -141,7 +142,7 @@ export class EmailReplyTokenService {
       return null;
     }
 
-    const match = localPart.match(/\+grillrent\.([A-Za-z0-9._-]+)$/i);
+    const match = localPart.match(/\+(?:gr|grillrent)\.([A-Za-z0-9._-]+)$/i);
     if (!match?.[1]) {
       return null;
     }
