@@ -332,7 +332,7 @@ export class MessageService {
   ): Promise<MessageReply> {
     const message = await this.findById(messageId, organizationId);
     if (message.senderUserId !== residentUserId) {
-      throw new ForbiddenException('You do not have permission to reply this message');
+      throw new ForbiddenException('You do not have permission to reply to this message');
     }
 
     const reply = this.messageReplyRepository.create({
@@ -416,7 +416,35 @@ export class MessageService {
       externalMessageId,
     });
 
-    const savedReply = await this.messageReplyRepository.save(inboundReply);
+    let savedReply: MessageReply;
+    try {
+      savedReply = await this.messageReplyRepository.save(inboundReply);
+    } catch (error) {
+      const duplicateExternalId = Boolean(
+        externalMessageId
+        && typeof error === 'object'
+        && error
+        && 'code' in error
+        && (error as { code?: string }).code === '23505',
+      );
+
+      if (duplicateExternalId) {
+        const dedupeExternalId = externalMessageId as string;
+        const existing = await this.messageReplyRepository.findOne({
+          where: {
+            messageId: message.id,
+            externalMessageId: dedupeExternalId,
+          },
+        });
+        return {
+          created: false,
+          reason: 'duplicate_external_message',
+          replyId: existing?.id || null,
+        };
+      }
+
+      throw error;
+    }
     const resolvedEmailStatus = await this.sendAdminResidentReplyEmail(message, savedReply);
     const updatedReply = await this.messageReplyRepository.save({
       ...savedReply,

@@ -15,7 +15,10 @@ export type MessageReplyOriginChannel = 'in_app' | 'email_inbound';
 
 @Entity('message_reply')
 @Index('IDX_message_reply_message_created_at', ['messageId', 'createdAt'])
-@Index('IDX_message_reply_message_external_id', ['messageId', 'externalMessageId'])
+@Index('UQ_message_reply_message_external_id', ['messageId', 'externalMessageId'], {
+  unique: true,
+  where: '"externalMessageId" IS NOT NULL',
+})
 export class MessageReply {
   @PrimaryGeneratedColumn('uuid')
   id: string;
