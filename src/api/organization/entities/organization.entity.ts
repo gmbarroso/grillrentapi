@@ -6,31 +6,31 @@ export class Organization {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ length: 120 })
+  @Column({ type: 'varchar', length: 120 })
   name!: string;
 
-  @Column({ length: 120 })
+  @Column({ type: 'varchar', length: 120 })
   slug!: string;
 
   @Column({ type: 'text', nullable: true })
   address?: string | null;
 
-  @Column({ length: 150, nullable: true })
+  @Column({ type: 'varchar', length: 150, nullable: true })
   email?: string | null;
 
-  @Column({ length: 40, nullable: true })
+  @Column({ type: 'varchar', length: 40, nullable: true })
   phone?: string | null;
 
   @Column({ type: 'text', nullable: true })
   businessHours?: string | null;
 
-  @Column({ length: 64, default: 'America/Sao_Paulo' })
+  @Column({ type: 'varchar', length: 64, default: 'America/Sao_Paulo' })
   timezone!: string;
 
-  @Column({ length: 5, nullable: true })
+  @Column({ type: 'varchar', length: 5, nullable: true })
   openingTime?: string | null;
 
-  @Column({ length: 5, nullable: true })
+  @Column({ type: 'varchar', length: 5, nullable: true })
   closingTime?: string | null;
 
   @Column({ type: 'text', nullable: true })
