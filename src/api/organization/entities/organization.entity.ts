@@ -13,28 +13,28 @@ export class Organization {
   slug!: string;
 
   @Column({ type: 'text', nullable: true })
-  address?: string;
+  address?: string | null;
 
   @Column({ length: 150, nullable: true })
-  email?: string;
+  email?: string | null;
 
   @Column({ length: 40, nullable: true })
-  phone?: string;
+  phone?: string | null;
 
   @Column({ type: 'text', nullable: true })
-  businessHours?: string;
+  businessHours?: string | null;
 
   @Column({ length: 64, default: 'America/Sao_Paulo' })
   timezone!: string;
 
   @Column({ length: 5, nullable: true })
-  openingTime?: string;
+  openingTime?: string | null;
 
   @Column({ length: 5, nullable: true })
-  closingTime?: string;
+  closingTime?: string | null;
 
   @Column({ type: 'text', nullable: true })
-  logoUrl?: string;
+  logoUrl?: string | null;
 
   @CreateDateColumn()
   createdAt!: Date;

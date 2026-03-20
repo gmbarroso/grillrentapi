@@ -80,4 +80,39 @@ describe('OrganizationService', () => {
       }),
     );
   });
+
+  it('persists cleared name and nullable identity fields', async () => {
+    organizationRepository.findOne.mockResolvedValue({
+      id: 'org-1',
+      name: 'Original',
+      logoUrl: 'https://example.com/logo.png',
+      address: 'Rua A',
+      timezone: 'America/Sao_Paulo',
+    });
+
+    await service.updateById('org-1', {
+      name: '',
+      logoUrl: '',
+      address: '',
+      email: null,
+      phone: '   ',
+      businessHours: '',
+      openingTime: null,
+      closingTime: '',
+    });
+
+    expect(organizationRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'org-1',
+        name: '',
+        logoUrl: null,
+        address: null,
+        email: null,
+        phone: null,
+        businessHours: null,
+        openingTime: null,
+        closingTime: null,
+      }),
+    );
+  });
 });

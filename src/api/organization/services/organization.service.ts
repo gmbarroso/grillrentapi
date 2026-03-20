@@ -74,34 +74,32 @@ export class OrganizationService {
 
     if (updateOrganizationDto.name !== undefined) {
       const normalizedName = updateOrganizationDto.name.trim();
-      if (normalizedName) {
-        organization.name = normalizedName;
-      }
+      organization.name = normalizedName;
     }
 
     if (updateOrganizationDto.address !== undefined) {
-      organization.address = this.normalizeOptional(updateOrganizationDto.address);
+      organization.address = this.normalizeNullable(updateOrganizationDto.address);
     }
     if (updateOrganizationDto.email !== undefined) {
-      organization.email = this.normalizeOptional(updateOrganizationDto.email);
+      organization.email = this.normalizeNullable(updateOrganizationDto.email);
     }
     if (updateOrganizationDto.phone !== undefined) {
-      organization.phone = this.normalizeOptional(updateOrganizationDto.phone);
+      organization.phone = this.normalizeNullable(updateOrganizationDto.phone);
     }
     if (updateOrganizationDto.businessHours !== undefined) {
-      organization.businessHours = this.normalizeOptional(updateOrganizationDto.businessHours);
+      organization.businessHours = this.normalizeNullable(updateOrganizationDto.businessHours);
     }
     if (updateOrganizationDto.timezone !== undefined) {
       organization.timezone = updateOrganizationDto.timezone.trim() || organization.timezone;
     }
     if (updateOrganizationDto.openingTime !== undefined) {
-      organization.openingTime = this.normalizeOptional(updateOrganizationDto.openingTime);
+      organization.openingTime = this.normalizeNullable(updateOrganizationDto.openingTime);
     }
     if (updateOrganizationDto.closingTime !== undefined) {
-      organization.closingTime = this.normalizeOptional(updateOrganizationDto.closingTime);
+      organization.closingTime = this.normalizeNullable(updateOrganizationDto.closingTime);
     }
     if (updateOrganizationDto.logoUrl !== undefined) {
-      organization.logoUrl = this.normalizeOptional(updateOrganizationDto.logoUrl);
+      organization.logoUrl = this.normalizeNullable(updateOrganizationDto.logoUrl);
     }
 
     return this.organizationRepository.save(organization);
@@ -111,6 +109,12 @@ export class OrganizationService {
     if (!value) return undefined;
     const normalized = value.trim();
     return normalized || undefined;
+  }
+
+  private normalizeNullable(value?: string | null): string | null {
+    if (value === undefined || value === null) return null;
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : null;
   }
 
   private normalizeSlug(input: string): string {
