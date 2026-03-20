@@ -71,7 +71,7 @@ $ npm run test:cov
 
 - Estratégia de resolução:
   1. `In-Reply-To` / `References` (IDs de thread do provider).
-  2. Fallback por token assinado em `Reply-To` no formato `faleconosco+grillrent.<token>@dominio`.
+  2. Fallback por token assinado em `Reply-To` no formato `faleconosco+gr.<token>@dominio` (compatível com legado `+grillrent.<token>`).
 - Segurança:
   - Token HMAC-SHA256 com `CONTACT_EMAIL_REPLY_TOKEN_SECRET`.
   - Expiração via `CONTACT_EMAIL_REPLY_TOKEN_TTL_HOURS` (ex: `720`).

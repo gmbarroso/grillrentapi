@@ -50,7 +50,9 @@ describe('EmailReplyTokenService', () => {
       senderEmail,
     });
 
-    const tampered = `${token.slice(0, -1)}x`;
+    const tamperedBytes = Buffer.from(token, 'base64url');
+    tamperedBytes[0] = tamperedBytes[0] ^ 0xff;
+    const tampered = tamperedBytes.toString('base64url');
     const verification = service.verifyCompactTokenAgainstContext(tampered, {
       organizationId,
       senderEmail,
@@ -78,8 +80,19 @@ describe('EmailReplyTokenService', () => {
     });
     const replyAddress = service.buildReplyToAddress('faleconosco@example.com', token);
 
-    expect(replyAddress.startsWith('faleconosco+grillrent.')).toBe(true);
+    expect(replyAddress.startsWith('faleconosco+gr.')).toBe(true);
     expect(service.extractTokenFromReplyAddress(replyAddress)).toBe(token);
     expect(service.extractTokenFromReplyAddress(`"Contact" <${replyAddress}>`)).toBe(token);
+  });
+
+  it('accepts legacy +grillrent token format for backward compatibility', () => {
+    const token = service.generateReplyToken({
+      messageId: '11111111-1111-4111-8111-111111111111',
+      organizationId: '22222222-2222-4222-8222-222222222222',
+      senderEmail: 'resident@example.com',
+    });
+
+    const legacyAddress = `faleconosco+grillrent.${token}@example.com`;
+    expect(service.extractTokenFromReplyAddress(legacyAddress)).toBe(token);
   });
 });
