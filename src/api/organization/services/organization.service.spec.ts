@@ -52,4 +52,32 @@ describe('OrganizationService', () => {
 
     expect(result.organization.slug).toBe('condominio-central');
   });
+
+  it('updates organization identity fields by id', async () => {
+    organizationRepository.findOne.mockResolvedValue({
+      id: 'org-1',
+      name: 'Original',
+      timezone: 'America/Sao_Paulo',
+    });
+
+    const result = await service.updateById('org-1', {
+      name: 'Condominio Atualizado',
+      businessHours: 'Segunda a sexta, das 9h as 18h',
+      logoUrl: 'https://example.com/logo.png',
+    });
+
+    expect(organizationRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'org-1',
+        name: 'Condominio Atualizado',
+        businessHours: 'Segunda a sexta, das 9h as 18h',
+        logoUrl: 'https://example.com/logo.png',
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 'org-1',
+      }),
+    );
+  });
 });

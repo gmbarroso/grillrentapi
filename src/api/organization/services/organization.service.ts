@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateOrganizationDto } from '../dto/create-organization.dto';
+import { UpdateOrganizationDto } from '../dto/update-organization.dto';
 import { Organization } from '../entities/organization.entity';
 
 @Injectable()
@@ -28,6 +29,7 @@ export class OrganizationService {
       address: this.normalizeOptional(createOrganizationDto.address),
       email: this.normalizeOptional(createOrganizationDto.email),
       phone: this.normalizeOptional(createOrganizationDto.phone),
+      businessHours: this.normalizeOptional(createOrganizationDto.businessHours),
       timezone: createOrganizationDto.timezone || 'America/Sao_Paulo',
       openingTime: this.normalizeOptional(createOrganizationDto.openingTime),
       closingTime: this.normalizeOptional(createOrganizationDto.closingTime),
@@ -57,6 +59,52 @@ export class OrganizationService {
       throw new NotFoundException('Organization not found');
     }
     return organization;
+  }
+
+  async findById(id: string): Promise<Organization> {
+    const organization = await this.organizationRepository.findOne({ where: { id } });
+    if (!organization) {
+      throw new NotFoundException('Organization not found');
+    }
+    return organization;
+  }
+
+  async updateById(id: string, updateOrganizationDto: UpdateOrganizationDto): Promise<Organization> {
+    const organization = await this.findById(id);
+
+    if (updateOrganizationDto.name !== undefined) {
+      const normalizedName = updateOrganizationDto.name.trim();
+      if (normalizedName) {
+        organization.name = normalizedName;
+      }
+    }
+
+    if (updateOrganizationDto.address !== undefined) {
+      organization.address = this.normalizeOptional(updateOrganizationDto.address);
+    }
+    if (updateOrganizationDto.email !== undefined) {
+      organization.email = this.normalizeOptional(updateOrganizationDto.email);
+    }
+    if (updateOrganizationDto.phone !== undefined) {
+      organization.phone = this.normalizeOptional(updateOrganizationDto.phone);
+    }
+    if (updateOrganizationDto.businessHours !== undefined) {
+      organization.businessHours = this.normalizeOptional(updateOrganizationDto.businessHours);
+    }
+    if (updateOrganizationDto.timezone !== undefined) {
+      organization.timezone = updateOrganizationDto.timezone.trim() || organization.timezone;
+    }
+    if (updateOrganizationDto.openingTime !== undefined) {
+      organization.openingTime = this.normalizeOptional(updateOrganizationDto.openingTime);
+    }
+    if (updateOrganizationDto.closingTime !== undefined) {
+      organization.closingTime = this.normalizeOptional(updateOrganizationDto.closingTime);
+    }
+    if (updateOrganizationDto.logoUrl !== undefined) {
+      organization.logoUrl = this.normalizeOptional(updateOrganizationDto.logoUrl);
+    }
+
+    return this.organizationRepository.save(organization);
   }
 
   private normalizeOptional(value?: string | null): string | undefined {

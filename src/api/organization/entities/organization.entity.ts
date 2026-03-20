@@ -21,6 +21,9 @@ export class Organization {
   @Column({ length: 40, nullable: true })
   phone?: string;
 
+  @Column({ type: 'text', nullable: true })
+  businessHours?: string;
+
   @Column({ length: 64, default: 'America/Sao_Paulo' })
   timezone!: string;
 

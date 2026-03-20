@@ -19,6 +19,8 @@ describe('OrganizationController', () => {
           useValue: {
             create: jest.fn(),
             findBySlug: jest.fn(),
+            findById: jest.fn(),
+            updateById: jest.fn(),
           },
         },
       ],
@@ -55,5 +57,33 @@ describe('OrganizationController', () => {
 
     await expect(controller.findBySlug('chacara-sacopa')).resolves.toEqual(payload);
     expect(service.findBySlug).toHaveBeenCalledWith('chacara-sacopa');
+  });
+
+  it('returns current organization by token organizationId', async () => {
+    const payload = { id: 'org-1', name: 'Condominio Norte' };
+    service.findById.mockResolvedValue(payload as any);
+
+    await expect(controller.getCurrent({ user: { organizationId: 'org-1' } } as any)).resolves.toEqual(payload);
+    expect(service.findById).toHaveBeenCalledWith('org-1');
+  });
+
+  it('updates current organization when requester is admin', async () => {
+    const dto = { name: 'Condominio Norte' };
+    const payload = { id: 'org-1', name: 'Condominio Norte' };
+    service.updateById.mockResolvedValue(payload as any);
+
+    await expect(
+      controller.updateCurrent({ user: { role: UserRole.ADMIN, organizationId: 'org-1' } } as any, dto as any),
+    ).resolves.toEqual(payload);
+    expect(service.updateById).toHaveBeenCalledWith('org-1', dto);
+  });
+
+  it('rejects organization update for non-admin users', async () => {
+    await expect(
+      controller.updateCurrent({ user: { role: UserRole.RESIDENT, organizationId: 'org-1' } } as any, {
+        name: 'Condominio',
+      } as any),
+    ).rejects.toThrow(ForbiddenException);
+    expect(service.updateById).not.toHaveBeenCalled();
   });
 });

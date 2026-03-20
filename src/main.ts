@@ -3,6 +3,7 @@ import { LogLevel, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
+import { json, urlencoded } from 'express';
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3000',
@@ -42,6 +43,9 @@ async function bootstrap() {
   });
   const configService = app.get(ConfigService);
   const allowedOrigins = parseAllowedOrigins();
+
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ extended: true, limit: '10mb' }));
 
   app.enableCors({
     origin: (origin, callback) => {
