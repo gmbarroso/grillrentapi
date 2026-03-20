@@ -21,6 +21,10 @@ import {
   VerifyOnboardingEmailDto,
   VerifyOnboardingEmailSchema,
 } from '../dto/onboarding.dto';
+import {
+  CompleteFirstAccessTourDto,
+  CompleteFirstAccessTourSchema,
+} from '../dto/tour.dto';
 
 @Controller('users')
 export class UserController {
@@ -153,5 +157,20 @@ export class UserController {
     @Body(new JoiValidationPipe(ChangePasswordSchema)) body: ChangePasswordDto,
   ) {
     return this.userService.changePassword(currentUser.id, currentUser.organizationId as string, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('tour/complete')
+  async completeFirstAccessTour(
+    @User() currentUser: UserEntity,
+    @Body(new JoiValidationPipe(CompleteFirstAccessTourSchema)) body: CompleteFirstAccessTourDto,
+  ) {
+    return this.userService.completeFirstAccessTour(currentUser.id, currentUser.organizationId as string, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('tour/reset')
+  async resetFirstAccessTour(@User() currentUser: UserEntity) {
+    return this.userService.resetFirstAccessTour(currentUser.id, currentUser.organizationId as string);
   }
 }

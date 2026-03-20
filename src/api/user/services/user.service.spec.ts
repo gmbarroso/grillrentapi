@@ -269,4 +269,43 @@ describe('UserService', () => {
   it('wires org SMTP repository dependency (sanity)', async () => {
     expect(organizationContactEmailSettingsRepository.findOne).not.toHaveBeenCalled();
   });
+
+  it('marks first access tour as completed with max version semantics', async () => {
+    userRepository.findOne.mockResolvedValue({
+      id: 'user-1',
+      organizationId: 'org-1',
+      role: UserRole.RESIDENT,
+      firstAccessTourVersionCompleted: 1,
+    } as User);
+    userRepository.save.mockImplementation(async (value) => value as User);
+
+    const result = await service.completeFirstAccessTour('user-1', 'org-1', { version: 2 });
+    expect(result).toEqual({
+      message: 'First access tour marked as completed',
+      tour: { firstAccessTourVersionCompleted: 2 },
+    });
+
+    await service.completeFirstAccessTour('user-1', 'org-1', { version: 1 });
+    expect(userRepository.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        firstAccessTourVersionCompleted: 2,
+      }),
+    );
+  });
+
+  it('resets first access tour state', async () => {
+    userRepository.findOne.mockResolvedValue({
+      id: 'user-1',
+      organizationId: 'org-1',
+      role: UserRole.RESIDENT,
+      firstAccessTourVersionCompleted: 3,
+    } as User);
+    userRepository.save.mockImplementation(async (value) => value as User);
+
+    const result = await service.resetFirstAccessTour('user-1', 'org-1');
+    expect(result).toEqual({
+      message: 'First access tour reset successfully',
+      tour: { firstAccessTourVersionCompleted: null },
+    });
+  });
 });

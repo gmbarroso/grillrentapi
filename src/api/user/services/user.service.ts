@@ -21,6 +21,7 @@ import {
   UserOnboardingStatusDto,
   VerifyOnboardingEmailDto,
 } from '../dto/onboarding.dto';
+import { CompleteFirstAccessTourDto, UserTourStateDto } from '../dto/tour.dto';
 import { ForgotPasswordConfirmDto, ForgotPasswordRequestDto } from '../dto/forgot-password.dto';
 import { EmailService } from '../../../shared/email/email.service';
 import { Organization } from '../../organization/entities/organization.entity';
@@ -56,6 +57,7 @@ export class UserService {
       message: 'User profile retrieved successfully',
       user: this.toSafeUser(user),
       onboarding: this.deriveOnboardingStatus(user),
+      tour: this.deriveTourState(user),
     };
   }
 
@@ -95,6 +97,50 @@ export class UserService {
       message: 'User profile updated successfully',
       user: this.toSafeUser(updatedUser),
       onboarding: this.deriveOnboardingStatus(updatedUser),
+      tour: this.deriveTourState(updatedUser),
+    };
+  }
+
+  async completeFirstAccessTour(
+    userId: string,
+    organizationId: string,
+    payload: CompleteFirstAccessTourDto,
+  ): Promise<{ message: string; tour: UserTourStateDto }> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId, organizationId },
+    });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const requestedVersion = Math.trunc(payload.version);
+    const currentVersion = user.firstAccessTourVersionCompleted ?? 0;
+    user.firstAccessTourVersionCompleted = Math.max(requestedVersion, currentVersion);
+    const updated = await this.userRepository.save(user);
+
+    return {
+      message: 'First access tour marked as completed',
+      tour: this.deriveTourState(updated),
+    };
+  }
+
+  async resetFirstAccessTour(
+    userId: string,
+    organizationId: string,
+  ): Promise<{ message: string; tour: UserTourStateDto }> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId, organizationId },
+    });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    user.firstAccessTourVersionCompleted = null;
+    const updated = await this.userRepository.save(user);
+
+    return {
+      message: 'First access tour reset successfully',
+      tour: this.deriveTourState(updated),
     };
   }
 
@@ -446,6 +492,12 @@ export class UserService {
       mustChangePassword,
       onboardingRequired,
       isOnboardingComplete: !onboardingRequired,
+    };
+  }
+
+  private deriveTourState(user: User): UserTourStateDto {
+    return {
+      firstAccessTourVersionCompleted: user.firstAccessTourVersionCompleted ?? null,
     };
   }
 

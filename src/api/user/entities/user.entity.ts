@@ -71,4 +71,7 @@ export class User {
 
   @Column({ type: 'timestamptz', nullable: true })
   passwordResetExpiresAt?: Date | null;
+
+  @Column({ type: 'integer', nullable: true })
+  firstAccessTourVersionCompleted?: number | null;
 }

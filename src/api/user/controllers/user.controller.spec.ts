@@ -28,6 +28,8 @@ describe('UserController', () => {
             verifyOnboardingEmail: jest.fn(),
             changeOnboardingPassword: jest.fn(),
             changePassword: jest.fn(),
+            completeFirstAccessTour: jest.fn(),
+            resetFirstAccessTour: jest.fn(),
           },
         },
       ],
@@ -254,6 +256,37 @@ describe('UserController', () => {
           token: 'a'.repeat(64),
           newPassword: 'Password2@',
         }),
+      ).resolves.toEqual(response);
+    });
+  });
+
+  describe('tour endpoints', () => {
+    it('should mark first access tour as completed', async () => {
+      const response = {
+        message: 'First access tour marked as completed',
+        tour: { firstAccessTourVersionCompleted: 1 },
+      };
+      jest.spyOn(service, 'completeFirstAccessTour').mockResolvedValue(response as any);
+
+      await expect(
+        controller.completeFirstAccessTour(
+          { id: 'resident-1', organizationId: 'org-1', role: UserRole.RESIDENT } as any,
+          { version: 1 },
+        ),
+      ).resolves.toEqual(response);
+    });
+
+    it('should reset first access tour state', async () => {
+      const response = {
+        message: 'First access tour reset successfully',
+        tour: { firstAccessTourVersionCompleted: null },
+      };
+      jest.spyOn(service, 'resetFirstAccessTour').mockResolvedValue(response as any);
+
+      await expect(
+        controller.resetFirstAccessTour(
+          { id: 'resident-1', organizationId: 'org-1', role: UserRole.RESIDENT } as any,
+        ),
       ).resolves.toEqual(response);
     });
   });
