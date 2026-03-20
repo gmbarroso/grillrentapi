@@ -8,13 +8,16 @@ import { User, UserRole } from '../../user/entities/user.entity';
 import { EmailService } from '../../../shared/email/email.service';
 import { ContactEmailSettingsService } from './contact-email-settings.service';
 import { ForbiddenException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 describe('MessageService', () => {
   let service: MessageService;
   let messageRepository: jest.Mocked<Repository<Message>>;
+  let messageReplyRepository: jest.Mocked<Repository<MessageReply>>;
   let userRepository: jest.Mocked<Repository<User>>;
   let emailService: jest.Mocked<EmailService>;
   let contactEmailSettingsService: jest.Mocked<ContactEmailSettingsService>;
+  let configService: jest.Mocked<ConfigService>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -37,14 +40,22 @@ describe('MessageService', () => {
             resolveDeliveryConfig: jest.fn(),
           },
         },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<MessageService>(MessageService);
     messageRepository = module.get(getRepositoryToken(Message));
+    messageReplyRepository = module.get(getRepositoryToken(MessageReply));
     userRepository = module.get(getRepositoryToken(User));
     emailService = module.get(EmailService);
     contactEmailSettingsService = module.get(ContactEmailSettingsService);
+    configService = module.get(ConfigService);
   });
 
   it('skips contact email when org mode is in_app_only', async () => {
@@ -171,5 +182,74 @@ describe('MessageService', () => {
         'org-1',
       ),
     ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('blocks resident reply when message is not owned by resident', async () => {
+    jest.spyOn(messageRepository, 'findOne').mockResolvedValue({
+      id: 'msg-1',
+      senderUserId: 'another-user',
+      organizationId: 'org-1',
+      replies: [],
+    } as any);
+
+    await expect(
+      service.replyAsResident(
+        'msg-1',
+        { content: 'Resposta' } as any,
+        'resident-1',
+        'Resident',
+        'org-1',
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('rejects inbound ingestion with invalid secret', async () => {
+    configService.get.mockReturnValue('expected-secret' as never);
+
+    await expect(
+      service.ingestInboundEmailReply(
+        {
+          organizationId: 'org-1',
+          messageId: 'msg-1',
+          fromEmail: 'resident@example.com',
+          content: 'reply',
+        } as any,
+        'wrong-secret',
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('returns duplicate_external_message when external id already exists', async () => {
+    configService.get.mockReturnValue('expected-secret' as never);
+    jest.spyOn(messageRepository, 'findOne').mockResolvedValue({
+      id: 'msg-1',
+      organizationId: 'org-1',
+      senderEmail: 'resident@example.com',
+      senderUserId: 'resident-1',
+      senderName: 'Resident',
+      replies: [],
+    } as any);
+    jest.spyOn(messageReplyRepository, 'findOne').mockResolvedValue({
+      id: 'reply-existing',
+      messageId: 'msg-1',
+      externalMessageId: 'ext-1',
+    } as any);
+
+    await expect(
+      service.ingestInboundEmailReply(
+        {
+          organizationId: 'org-1',
+          messageId: 'msg-1',
+          fromEmail: 'resident@example.com',
+          content: 'reply',
+          externalMessageId: 'ext-1',
+        } as any,
+        'expected-secret',
+      ),
+    ).resolves.toEqual({
+      created: false,
+      reason: 'duplicate_external_message',
+      replyId: 'reply-existing',
+    });
   });
 });

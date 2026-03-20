@@ -607,6 +607,10 @@ describe('BookingService', () => {
           {
             startTime: '2026-03-03T22:00:00.000Z',
             endTime: '2026-03-03T23:00:00.000Z',
+            userId: null,
+            userApartment: null,
+            userBlock: null,
+            bookedOnBehalf: null,
           },
         ],
       });
