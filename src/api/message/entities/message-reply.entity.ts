@@ -10,8 +10,12 @@ import {
 } from 'typeorm';
 import { Message, MessageEmailDeliveryStatus } from './message.entity';
 
+export type MessageReplyOriginRole = 'admin' | 'resident';
+export type MessageReplyOriginChannel = 'in_app' | 'email_inbound';
+
 @Entity('message_reply')
 @Index('IDX_message_reply_message_created_at', ['messageId', 'createdAt'])
+@Index('IDX_message_reply_message_external_id', ['messageId', 'externalMessageId'])
 export class MessageReply {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -28,6 +32,12 @@ export class MessageReply {
 
   @Column({ length: 120 })
   authorName: string;
+
+  @Column({ type: 'varchar', length: 16, default: 'admin' })
+  originRole: MessageReplyOriginRole;
+
+  @Column({ type: 'varchar', length: 24, default: 'in_app' })
+  originChannel: MessageReplyOriginChannel;
 
   @Column('text')
   content: string;
@@ -46,6 +56,9 @@ export class MessageReply {
 
   @Column({ type: 'text', nullable: true })
   emailLastError?: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  externalMessageId?: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

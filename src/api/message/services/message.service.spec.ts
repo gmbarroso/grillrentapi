@@ -8,6 +8,7 @@ import { User, UserRole } from '../../user/entities/user.entity';
 import { EmailService } from '../../../shared/email/email.service';
 import { ContactEmailSettingsService } from './contact-email-settings.service';
 import { ForbiddenException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 describe('MessageService', () => {
   let service: MessageService;
@@ -35,6 +36,12 @@ describe('MessageService', () => {
             getSettings: jest.fn(),
             updateSettings: jest.fn(),
             resolveDeliveryConfig: jest.fn(),
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn(),
           },
         },
       ],

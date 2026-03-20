@@ -10,6 +10,9 @@ export interface SendEmailInput {
   text: string;
   html?: string;
   replyTo?: string;
+  inReplyTo?: string;
+  references?: string;
+  headers?: Record<string, string>;
   from?: string;
   smtp?: {
     host: string;
@@ -107,6 +110,9 @@ export class EmailService {
         text: input.text,
         html: input.html,
         replyTo: input.replyTo,
+        inReplyTo: input.inReplyTo,
+        references: input.references,
+        headers: input.headers,
       });
 
       return {
@@ -170,6 +176,9 @@ export class EmailService {
         text: input.text,
         html: input.html,
         replyTo: input.replyTo,
+        inReplyTo: input.inReplyTo,
+        references: input.references,
+        headers: input.headers,
       });
 
       return {
