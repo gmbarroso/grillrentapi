@@ -21,8 +21,6 @@ describe('MessageController', () => {
             findAllForResident: jest.fn(),
             getUnreadState: jest.fn(),
             markAsRead: jest.fn(),
-            replyAsAdmin: jest.fn(),
-            replyAsResident: jest.fn(),
             ingestInboundEmailReply: jest.fn(),
             deleteAsAdmin: jest.fn(),
           },

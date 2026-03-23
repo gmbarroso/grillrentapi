@@ -193,25 +193,6 @@ describe('MessageService', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('blocks resident reply when message is not owned by resident', async () => {
-    jest.spyOn(messageRepository, 'findOne').mockResolvedValue({
-      id: 'msg-1',
-      senderUserId: 'another-user',
-      organizationId: 'org-1',
-      replies: [],
-    } as any);
-
-    await expect(
-      service.replyAsResident(
-        'msg-1',
-        { content: 'Resposta' } as any,
-        'resident-1',
-        'Resident',
-        'org-1',
-      ),
-    ).rejects.toThrow(ForbiddenException);
-  });
-
   it('rejects inbound ingestion with invalid secret', async () => {
     configService.get.mockReturnValue('expected-secret' as never);
 

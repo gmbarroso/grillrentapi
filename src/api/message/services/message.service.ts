@@ -5,7 +5,6 @@ import { Repository } from 'typeorm';
 import { User, UserRole } from '../../user/entities/user.entity';
 import { EmailService, type SendEmailAttachmentInput } from '../../../shared/email/email.service';
 import { CreateMessageDto } from '../dto/create-message.dto';
-import { CreateMessageReplyDto } from '../dto/create-message-reply.dto';
 import { QueryMessagesDto } from '../dto/query-messages.dto';
 import { Message, MessageEmailDeliveryStatus } from '../entities/message.entity';
 import { MessageReply } from '../entities/message-reply.entity';
@@ -274,107 +273,6 @@ export class MessageService {
     return { success: true };
   }
 
-  async replyAsAdmin(
-    messageId: string,
-    data: CreateMessageReplyDto,
-    adminUserId: string,
-    adminName: string,
-    organizationId: string,
-  ): Promise<MessageReply> {
-    const message = await this.findById(messageId, organizationId);
-
-    const sendViaEmail = Boolean(data.sendViaEmail) && Boolean(message.senderEmail);
-
-    const reply = this.messageReplyRepository.create({
-      messageId: message.id,
-      authorUserId: adminUserId,
-      authorName: adminName,
-      originRole: 'admin',
-      originChannel: 'in_app',
-      content: data.content.trim(),
-      sendViaEmail,
-      emailDeliveryStatus: sendViaEmail ? 'pending' : 'not_requested',
-    });
-
-    const savedReply = await this.messageReplyRepository.save(reply);
-
-    const resolvedEmailStatus = sendViaEmail
-      ? await this.sendReplyEmail(message, savedReply)
-      : ({
-          status: 'not_requested',
-          providerMessageId: null,
-          errorMessage: null,
-        } as const);
-
-    const updatedReply = await this.messageReplyRepository.save({
-      ...savedReply,
-      emailDeliveryStatus: resolvedEmailStatus.status,
-      emailProviderMessageId: resolvedEmailStatus.providerMessageId,
-      emailSentAt: resolvedEmailStatus.status === 'sent' ? new Date() : null,
-      emailLastError: resolvedEmailStatus.errorMessage,
-    });
-
-    await this.messageRepository.update(message.id, {
-      status: 'replied',
-      readAt: message.readAt || new Date(),
-    });
-
-    this.logger.log(
-      JSON.stringify({
-        event: 'contact_message_replied',
-        messageId: message.id,
-        replyId: updatedReply.id,
-        organizationId,
-        sentByEmail: sendViaEmail,
-        emailStatus: updatedReply.emailDeliveryStatus,
-      }),
-    );
-
-    return updatedReply;
-  }
-
-  async replyAsResident(
-    messageId: string,
-    data: CreateMessageReplyDto,
-    residentUserId: string,
-    residentName: string,
-    organizationId: string,
-  ): Promise<MessageReply> {
-    const message = await this.findById(messageId, organizationId);
-    if (message.senderUserId !== residentUserId) {
-      throw new ForbiddenException('You do not have permission to reply to this message');
-    }
-
-    const reply = this.messageReplyRepository.create({
-      messageId: message.id,
-      authorUserId: residentUserId,
-      authorName: residentName,
-      originRole: 'resident',
-      originChannel: 'in_app',
-      content: data.content.trim(),
-      sendViaEmail: true,
-      emailDeliveryStatus: 'pending',
-    });
-
-    const savedReply = await this.messageReplyRepository.save(reply);
-    const resolvedEmailStatus = await this.sendAdminResidentReplyEmail(message, savedReply);
-
-    const updatedReply = await this.messageReplyRepository.save({
-      ...savedReply,
-      emailDeliveryStatus: resolvedEmailStatus.status,
-      emailProviderMessageId: resolvedEmailStatus.providerMessageId,
-      emailSentAt: resolvedEmailStatus.status === 'sent' ? new Date() : null,
-      emailLastError: resolvedEmailStatus.errorMessage,
-    });
-
-    await this.messageRepository.update(message.id, {
-      status: 'unread',
-      readAt: null,
-    });
-
-    return updatedReply;
-  }
-
   async ingestInboundEmailReply(
     data: IngestInboundEmailReplyDto,
     providedSecret?: string,
@@ -487,50 +385,6 @@ export class MessageService {
     });
 
     return { created: true, reason: null, replyId: updatedReply.id };
-  }
-
-  private async sendReplyEmail(message: Message, reply: MessageReply): Promise<{
-    status: MessageEmailDeliveryStatus;
-    providerMessageId: string | null;
-    errorMessage: string | null;
-  }> {
-    const config = await this.contactEmailSettingsService.resolveDeliveryConfig(message.organizationId!, message.senderEmail);
-    if (!config.shouldSend) {
-      const reason = config.validationErrors.length
-        ? `${config.reason}: ${config.validationErrors.join('; ')}`
-        : config.reason;
-      return {
-        status: 'skipped',
-        providerMessageId: null,
-        errorMessage: this.trimError(reason),
-      };
-    }
-
-    const previousResidentThreadMessageId = await this.resolvePreviousResidentThreadMessageId(message.id, reply.id);
-    const residentThreadRoot = previousResidentThreadMessageId;
-    const residentThreadLatest = previousResidentThreadMessageId;
-
-    const emailResult = await this.emailService.send({
-      to: [message.senderEmail],
-      subject: `[Resposta] ${message.subject}`,
-      text: this.composeResidentReplyEmail(message, reply),
-      from: config.from || undefined,
-      replyTo: this.buildSignedReplyToAddress(message, config.replyTo),
-      inReplyTo: residentThreadLatest || undefined,
-      references: this.composeReferences(residentThreadRoot, residentThreadLatest),
-      headers: {
-        'X-GrillRent-Message-Id': message.id,
-        'X-GrillRent-Organization-Id': message.organizationId || '',
-        'X-GrillRent-Reply-Id': reply.id,
-      },
-      smtp: config.smtp,
-    });
-
-    return {
-      status: emailResult.status,
-      providerMessageId: emailResult.providerMessageId,
-      errorMessage: emailResult.errorMessage,
-    };
   }
 
   private async sendAdminResidentReplyEmail(message: Message, reply: MessageReply): Promise<{
@@ -904,18 +758,6 @@ export class MessageService {
     return message.length > 1024 ? message.slice(0, 1024) : message;
   }
 
-  private composeResidentReplyEmail(message: Message, reply: MessageReply): string {
-    return [
-      `Ola, ${message.senderName}.`,
-      '',
-      `Sua mensagem sobre "${message.subject}" recebeu uma resposta da administracao:`,
-      '',
-      reply.content,
-      '',
-      'Obrigado.',
-    ].join('\n');
-  }
-
   private composeAdminResidentReplyEmail(message: Message, reply: MessageReply): string {
     return [
       'Nova resposta do morador no fluxo de contato.',
@@ -934,22 +776,6 @@ export class MessageService {
     const values = [root, latest].filter((value): value is string => Boolean(value && value.trim()));
     if (!values.length) return undefined;
     return Array.from(new Set(values)).join(' ');
-  }
-
-  private async resolvePreviousResidentThreadMessageId(
-    messageId: string,
-    currentReplyId: string,
-  ): Promise<string | null> {
-    const previousReply = await this.messageReplyRepository
-      .createQueryBuilder('reply')
-      .where('reply.messageId = :messageId', { messageId })
-      .andWhere('reply.id != :currentReplyId', { currentReplyId })
-      .andWhere('reply.originRole = :originRole', { originRole: 'admin' })
-      .andWhere('reply.emailProviderMessageId IS NOT NULL')
-      .orderBy('reply.createdAt', 'DESC')
-      .getOne();
-
-    return previousReply?.emailProviderMessageId || null;
   }
 
   private async resolveLatestAdminNotificationMessageId(messageId: string): Promise<string | null> {
