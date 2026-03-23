@@ -4,6 +4,13 @@ import * as nodemailer from 'nodemailer';
 
 export type EmailDeliveryStatus = 'not_requested' | 'pending' | 'sent' | 'failed' | 'skipped';
 
+export interface SendEmailAttachmentInput {
+  filename: string;
+  content: string;
+  contentType: string;
+  encoding?: 'base64';
+}
+
 export interface SendEmailInput {
   to: string[];
   subject: string;
@@ -14,6 +21,7 @@ export interface SendEmailInput {
   references?: string;
   headers?: Record<string, string>;
   from?: string;
+  attachments?: SendEmailAttachmentInput[];
   smtp?: {
     host: string;
     port: number;
@@ -109,6 +117,7 @@ export class EmailService {
         subject: input.subject,
         text: input.text,
         html: input.html,
+        attachments: input.attachments,
         replyTo: input.replyTo,
         inReplyTo: input.inReplyTo,
         references: input.references,
@@ -175,6 +184,7 @@ export class EmailService {
         subject: input.subject,
         text: input.text,
         html: input.html,
+        attachments: input.attachments,
         replyTo: input.replyTo,
         inReplyTo: input.inReplyTo,
         references: input.references,

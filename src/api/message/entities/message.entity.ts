@@ -44,6 +44,9 @@ export class Message {
   @Column('text')
   content: string;
 
+  @Column({ type: 'simple-json', nullable: true })
+  attachments?: string[] | null;
+
   @Column({ type: 'varchar', length: 32, default: 'unread' })
   status: ContactMessageStatus;
 

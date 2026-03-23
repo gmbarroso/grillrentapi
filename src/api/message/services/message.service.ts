@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User, UserRole } from '../../user/entities/user.entity';
-import { EmailService } from '../../../shared/email/email.service';
+import { EmailService, type SendEmailAttachmentInput } from '../../../shared/email/email.service';
 import { CreateMessageDto } from '../dto/create-message.dto';
 import { CreateMessageReplyDto } from '../dto/create-message-reply.dto';
 import { QueryMessagesDto } from '../dto/query-messages.dto';
@@ -59,6 +59,7 @@ export class MessageService {
       subject: data.subject.trim(),
       category: data.category,
       content: data.content.trim(),
+      attachments: data.attachments?.map((attachment) => attachment.trim()) || null,
       status: 'unread',
       senderUserId: sender.id,
       senderName: sender.name,
@@ -604,6 +605,7 @@ export class MessageService {
         subject: `[Contato] ${this.categoryLabel(message.category)} - ${message.subject}`,
         replyTo: this.buildSignedReplyToAddress(message, config.replyTo),
         text: this.composeAdminMessageEmail(message),
+        attachments: this.buildContactEmailAttachments(message),
         headers: {
           'X-GrillRent-Message-Id': message.id,
           'X-GrillRent-Organization-Id': message.organizationId || '',
@@ -845,6 +847,8 @@ export class MessageService {
   }
 
   private composeAdminMessageEmail(message: Message): string {
+    const attachmentCount = message.attachments?.length || 0;
+
     return [
       'Nova mensagem enviada pelo contato do app.',
       '',
@@ -853,10 +857,47 @@ export class MessageService {
       `Morador: ${message.senderName}`,
       `Email: ${message.senderEmail}`,
       `Apartamento/Bloco: ${message.senderApartment || '--'} / ${message.senderBlock ?? '--'}`,
+      `Anexos: ${attachmentCount} imagem(ns)`,
       '',
       'Mensagem:',
       message.content,
     ].join('\n');
+  }
+
+  private buildContactEmailAttachments(message: Message): SendEmailAttachmentInput[] {
+    const attachments = message.attachments || [];
+
+    return attachments
+      .map((dataUrl, index) => this.toEmailAttachment(dataUrl, index))
+      .filter((attachment): attachment is SendEmailAttachmentInput => Boolean(attachment));
+  }
+
+  private toEmailAttachment(dataUrl: string, index: number): SendEmailAttachmentInput | null {
+    const match = /^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\r\n]+)$/i.exec(dataUrl.trim());
+    if (!match) return null;
+
+    const contentType = match[1].toLowerCase();
+    const base64Payload = match[2].replace(/\s/g, '');
+    if (!base64Payload) return null;
+
+    const extension = this.mimeToExtension(contentType);
+    const safeIndex = index + 1;
+
+    return {
+      filename: `contato-anexo-${safeIndex}.${extension}`,
+      content: base64Payload,
+      contentType,
+      encoding: 'base64',
+    };
+  }
+
+  private mimeToExtension(mimeType: string): string {
+    if (mimeType === 'image/jpeg' || mimeType === 'image/jpg') return 'jpg';
+    if (mimeType === 'image/png') return 'png';
+    if (mimeType === 'image/webp') return 'webp';
+    if (mimeType === 'image/gif') return 'gif';
+    if (mimeType === 'image/svg+xml') return 'svg';
+    return 'bin';
   }
 
   private trimError(message: string): string {
