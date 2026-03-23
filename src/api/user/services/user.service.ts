@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -23,7 +24,7 @@ import {
 } from '../dto/onboarding.dto';
 import { CompleteFirstAccessTourDto, UserTourStateDto } from '../dto/tour.dto';
 import { ForgotPasswordConfirmDto, ForgotPasswordRequestDto } from '../dto/forgot-password.dto';
-import { EmailService } from '../../../shared/email/email.service';
+import { EmailService, type SendEmailResult } from '../../../shared/email/email.service';
 import { Organization } from '../../organization/entities/organization.entity';
 import { OrganizationContactEmailSettings } from '../../message/entities/organization-contact-email-settings.entity';
 import { decryptOrganizationSmtpSecret } from '../../../shared/security/org-smtp-crypto.util';
@@ -235,26 +236,15 @@ export class UserService {
     const plainToken = this.issueVerificationToken(user);
     await this.userRepository.save(user);
 
-    const smtpConfig = await this.resolveOrganizationSmtpConfig(organizationId);
-    if (smtpConfig) {
-      await this.emailService.send({
-        to: [normalizedEmail],
-        from: smtpConfig.fromHeader,
-        subject: 'Verify your email',
-        text: [
-          `Hello ${user.name},`,
-          '',
-          `Use this token to verify your email: ${plainToken}`,
-          'This token expires in 30 minutes.',
-          '',
-          'If you did not request this change, ignore this message.',
-        ].join('\n'),
-        smtp: smtpConfig.smtp,
-      });
-    } else {
-      this.logger.warn(
-        `Onboarding verification email skipped because organization SMTP is not configured (organizationId=${organizationId})`,
+    const emailResult = await this.sendOnboardingVerificationEmail(organizationId, user.name, normalizedEmail, plainToken);
+    if (emailResult.status !== 'sent') {
+      const reason = emailResult.errorMessage || 'Unknown email delivery error';
+      this.logger.error(
+        `Onboarding verification email was not delivered (status=${emailResult.status}, organizationId=${organizationId}): ${reason}`,
       );
+      if (this.isProductionLike()) {
+        throw new ServiceUnavailableException('Não foi possível enviar o token de verificação por e-mail. Tente novamente.');
+      }
     }
 
     return {
@@ -594,5 +584,34 @@ export class UserService {
   private isProductionLike(): boolean {
     const env = (this.configService.get<string>('NODE_ENV') || '').toLowerCase();
     return env === 'production' || env === 'staging';
+  }
+
+  private async sendOnboardingVerificationEmail(
+    organizationId: string,
+    userName: string,
+    recipientEmail: string,
+    plainToken: string,
+  ): Promise<SendEmailResult> {
+    const smtpConfig = await this.resolveOrganizationSmtpConfig(organizationId);
+    if (!smtpConfig) {
+      this.logger.warn(
+        `Organization SMTP not configured for onboarding email (organizationId=${organizationId}). Falling back to default SMTP provider.`,
+      );
+    }
+
+    return this.emailService.send({
+      to: [recipientEmail],
+      from: smtpConfig?.fromHeader,
+      subject: 'Verify your email',
+      text: [
+        `Hello ${userName},`,
+        '',
+        `Use this token to verify your email: ${plainToken}`,
+        'This token expires in 30 minutes.',
+        '',
+        'If you did not request this change, ignore this message.',
+      ].join('\n'),
+      smtp: smtpConfig?.smtp,
+    });
   }
 }
