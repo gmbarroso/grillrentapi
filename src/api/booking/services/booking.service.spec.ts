@@ -103,7 +103,7 @@ describe('BookingService', () => {
       await expect(service.create(dto, 'user-1', UserRole.RESIDENT, ORG_ID)).rejects.toThrow(BadRequestException);
     });
 
-    it('allows same-day future booking for tennis', async () => {
+    it('allows same-day future booking for hourly resources', async () => {
       const now = Date.now();
       const dto: CreateBookingDto = {
         ...createBookingDto,
@@ -119,7 +119,7 @@ describe('BookingService', () => {
       } as unknown as Booking;
 
       jest.spyOn(service, 'checkAvailability').mockResolvedValue({ available: true, message: 'Available' });
-      jest.spyOn(resourceService, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+      jest.spyOn(resourceService, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hourly' } as Resource);
       jest.spyOn(userRepository, 'findOne').mockResolvedValue({ id: 'user-1', role: UserRole.RESIDENT } as User);
       jest.spyOn(bookingRepository, 'create').mockReturnValue(createdBooking);
       jest.spyOn(bookingRepository, 'save').mockResolvedValue(createdBooking);
@@ -183,26 +183,18 @@ describe('BookingService', () => {
         apartment: '201',
         block: 2,
       } as User);
-      jest.spyOn(bookingRepository, 'create').mockReturnValue({
+      jest.spyOn(bookingRepository, 'create').mockImplementation((payload: any) => ({
         id: 'booking-1',
-      } as Booking);
-      jest.spyOn(bookingRepository, 'save').mockResolvedValue({ id: 'booking-1' } as Booking);
-      jest.spyOn(bookingRepository, 'findOne').mockResolvedValue({
-        id: 'booking-1',
-        startTime: slotAStart,
-        endTime: slotAEnd,
-        bookedOnBehalf: undefined,
-        needTablesAndChairs: false,
-        user: { id: 'user-1', apartment: '201', block: 2 },
-        resource: { id: 'resource-1', name: 'Quadra de Tenis', type: 'hourly' },
-      } as unknown as Booking);
+        ...payload,
+      } as Booking));
+      jest.spyOn(bookingRepository, 'save').mockImplementation(async (booking) => booking as Booking);
 
       const result = await service.createBatch(
         {
           resourceId: 'resource-1',
           slots: [
-            { startTime: slotAStart, endTime: slotAEnd },
-            { startTime: slotBStart, endTime: slotBEnd },
+            { startTime: slotAStart.toISOString(), endTime: slotAEnd.toISOString() },
+            { startTime: slotBStart.toISOString(), endTime: slotBEnd.toISOString() },
           ],
         },
         'user-1',
@@ -231,7 +223,7 @@ describe('BookingService', () => {
         service.createBatch(
           {
             resourceId: 'resource-1',
-            slots: [{ startTime: new Date('2026-06-10T12:00:00.000Z'), endTime: new Date('2026-06-10T13:00:00.000Z') }],
+            slots: [{ startTime: '2026-06-10T12:00:00.000Z', endTime: '2026-06-10T13:00:00.000Z' }],
           },
           'user-1',
           UserRole.RESIDENT,
@@ -414,8 +406,8 @@ describe('BookingService', () => {
       expect(result.message).toContain('already booked by apartment 101');
     });
 
-    it('enforces tennis daily cap of 2 hours per user', async () => {
-      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+    it('enforces hourly daily cap of 2 hours per user', async () => {
+      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hourly' } as Resource);
       jest.spyOn(bookingRepository, 'find').mockResolvedValue([]);
 
       const queryBuilder = {
@@ -446,11 +438,11 @@ describe('BookingService', () => {
         startOfLocalDayUtc: new Date('2026-06-10T03:00:00.000Z'),
       });
       expect(result.available).toBe(false);
-      expect(result.message).toContain('more than 2 total tennis hours');
+      expect(result.message).toContain('more than 2 total hourly hours');
     });
 
-    it('counts overlap with day window for tennis cap', async () => {
-      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+    it('counts overlap with day window for hourly cap', async () => {
+      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hourly' } as Resource);
       jest.spyOn(bookingRepository, 'find').mockResolvedValue([]);
 
       const queryBuilder = {
@@ -476,11 +468,11 @@ describe('BookingService', () => {
       );
 
       expect(result.available).toBe(false);
-      expect(result.message).toContain('more than 2 total tennis hours');
+      expect(result.message).toContain('more than 2 total hourly hours');
     });
 
-    it('allows tennis booking that crosses UTC date but stays on same Sao Paulo local day', async () => {
-      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+    it('allows hourly booking that crosses UTC date but stays on same Sao Paulo local day', async () => {
+      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hourly' } as Resource);
       jest.spyOn(bookingRepository, 'find').mockResolvedValue([]);
 
       const queryBuilder = {
@@ -501,8 +493,8 @@ describe('BookingService', () => {
       expect(result.available).toBe(true);
     });
 
-    it('rejects tennis booking when start and end fall on different Sao Paulo local days', async () => {
-      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+    it('rejects hourly booking when start and end fall on different Sao Paulo local days', async () => {
+      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hourly' } as Resource);
 
       await expect(
         service.checkAvailability(
@@ -515,7 +507,7 @@ describe('BookingService', () => {
     });
 
     it('rejects invalid dates in time range validation', async () => {
-      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hourly' } as Resource);
 
       await expect(
         service.checkAvailability(

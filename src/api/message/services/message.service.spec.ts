@@ -3,7 +3,6 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { MessageService } from './message.service';
 import { Message } from '../entities/message.entity';
-import { MessageReply } from '../entities/message-reply.entity';
 import { User, UserRole } from '../../user/entities/user.entity';
 import { EmailService } from '../../../shared/email/email.service';
 import { ContactEmailSettingsService } from './contact-email-settings.service';
@@ -21,7 +20,6 @@ describe('MessageService', () => {
       providers: [
         MessageService,
         { provide: getRepositoryToken(Message), useClass: Repository },
-        { provide: getRepositoryToken(MessageReply), useClass: Repository },
         { provide: getRepositoryToken(User), useClass: Repository },
         {
           provide: EmailService,
@@ -168,6 +166,27 @@ describe('MessageService', () => {
       service.createFromContact(
         { subject: 'Assunto', category: 'question', content: 'Mensagem' },
         'user-2',
+        'org-1',
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('blocks contact creation when resident has pending email verification', async () => {
+    jest.spyOn(userRepository, 'findOne').mockResolvedValue({
+      id: 'user-3',
+      name: 'Resident',
+      email: 'resident@example.com',
+      emailVerifiedAt: new Date('2026-01-01T00:00:00.000Z'),
+      pendingEmail: 'new@example.com',
+      role: UserRole.RESIDENT,
+      mustChangePassword: false,
+      organizationId: 'org-1',
+    } as User);
+
+    await expect(
+      service.createFromContact(
+        { subject: 'Assunto', category: 'question', content: 'Mensagem' },
+        'user-3',
         'org-1',
       ),
     ).rejects.toThrow(ForbiddenException);

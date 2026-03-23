@@ -63,8 +63,8 @@ describe('BookingController', () => {
       resourceId: 'resource-1',
       slots: [
         {
-          startTime: new Date('2026-06-10T12:00:00.000Z'),
-          endTime: new Date('2026-06-10T13:00:00.000Z'),
+          startTime: '2026-06-10T12:00:00.000Z',
+          endTime: '2026-06-10T13:00:00.000Z',
         },
       ],
       bookedOnBehalf: '201',

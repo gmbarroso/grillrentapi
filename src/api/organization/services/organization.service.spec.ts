@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { OrganizationService } from './organization.service';
 
 describe('OrganizationService', () => {
@@ -81,7 +81,23 @@ describe('OrganizationService', () => {
     );
   });
 
-  it('persists cleared name and nullable identity fields', async () => {
+  it('rejects blank organization name on update', async () => {
+    organizationRepository.findOne.mockResolvedValue({
+      id: 'org-1',
+      name: 'Original',
+      logoUrl: 'https://example.com/logo.png',
+      address: 'Rua A',
+      timezone: 'America/Sao_Paulo',
+    });
+
+    await expect(
+      service.updateById('org-1', {
+        name: '',
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('persists nullable identity fields without blanking name', async () => {
     organizationRepository.findOne.mockResolvedValue({
       id: 'org-1',
       name: 'Original',
@@ -91,7 +107,6 @@ describe('OrganizationService', () => {
     });
 
     await service.updateById('org-1', {
-      name: '',
       logoUrl: '',
       address: '',
       email: null,
@@ -104,7 +119,7 @@ describe('OrganizationService', () => {
     expect(organizationRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'org-1',
-        name: '',
+        name: 'Original',
         logoUrl: null,
         address: null,
         email: null,

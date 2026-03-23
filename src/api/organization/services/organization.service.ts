@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateOrganizationDto } from '../dto/create-organization.dto';
@@ -74,6 +74,9 @@ export class OrganizationService {
 
     if (updateOrganizationDto.name !== undefined) {
       const normalizedName = updateOrganizationDto.name.trim();
+      if (!normalizedName) {
+        throw new BadRequestException('Organization name cannot be empty');
+      }
       organization.name = normalizedName;
     }
 

@@ -27,6 +27,7 @@ describe('UserService', () => {
           useValue: {
             findOne: jest.fn(),
             save: jest.fn(),
+            createQueryBuilder: jest.fn(),
           },
         },
         {
@@ -295,13 +296,29 @@ describe('UserService', () => {
   });
 
   it('marks first access tour as completed with max version semantics', async () => {
-    userRepository.findOne.mockResolvedValue({
-      id: 'user-1',
-      organizationId: 'org-1',
-      role: UserRole.RESIDENT,
-      firstAccessTourVersionCompleted: 1,
-    } as User);
-    userRepository.save.mockImplementation(async (value) => value as User);
+    const updateBuilder = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      setParameters: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue(undefined),
+    };
+    userRepository.createQueryBuilder.mockReturnValue(updateBuilder as any);
+
+    userRepository.findOne
+      .mockResolvedValueOnce({
+        id: 'user-1',
+        organizationId: 'org-1',
+        role: UserRole.RESIDENT,
+        firstAccessTourVersionCompleted: 2,
+      } as User)
+      .mockResolvedValueOnce({
+        id: 'user-1',
+        organizationId: 'org-1',
+        role: UserRole.RESIDENT,
+        firstAccessTourVersionCompleted: 2,
+      } as User);
 
     const result = await service.completeFirstAccessTour('user-1', 'org-1', { version: 2 });
     expect(result).toEqual({
@@ -310,11 +327,12 @@ describe('UserService', () => {
     });
 
     await service.completeFirstAccessTour('user-1', 'org-1', { version: 1 });
-    expect(userRepository.save).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        firstAccessTourVersionCompleted: 2,
-      }),
-    );
+
+    expect(updateBuilder.set).toHaveBeenCalledWith({
+      firstAccessTourVersionCompleted: expect.any(Function),
+    });
+    expect(updateBuilder.setParameters).toHaveBeenCalledWith({ requestedVersion: 1 });
+    expect(updateBuilder.execute).toHaveBeenCalledTimes(2);
   });
 
   it('resets first access tour state', async () => {

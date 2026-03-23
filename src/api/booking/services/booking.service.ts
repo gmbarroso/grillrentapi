@@ -18,6 +18,7 @@ import { Resource } from '../../resource/entities/resource.entity';
 export class BookingService {
   private readonly logger = new Logger(BookingService.name);
   private static readonly SAO_PAULO_UTC_OFFSET_HOURS = 3;
+  private static readonly MAX_BATCH_SLOTS = 50;
 
   constructor(
     @InjectRepository(Booking)
@@ -50,6 +51,10 @@ export class BookingService {
       throw new BadRequestException('slots must contain at least one booking interval');
     }
 
+    if (slots.length > BookingService.MAX_BATCH_SLOTS) {
+      throw new BadRequestException(`slots can contain at most ${BookingService.MAX_BATCH_SLOTS} booking intervals`);
+    }
+
     const resource = await this.resourceService.findOne(resourceId, organizationId);
     if (!resource) {
       this.logger.warn(`Resource not found: ${resourceId}`);
@@ -58,6 +63,12 @@ export class BookingService {
 
     if (resource.type !== 'hourly') {
       throw new BadRequestException('Batch booking is only available for hourly resources');
+    }
+
+    const user = await this.userRepository.findOne({ where: { id: userId, organizationId } });
+    if (!user) {
+      this.logger.warn(`User not found: ${userId}`);
+      throw new BadRequestException('Invalid user');
     }
 
     const created: Array<{
@@ -97,41 +108,27 @@ export class BookingService {
           userId,
           userRole,
           organizationId,
+          { resource, user },
         );
 
-        const bookingWithRelations = await this.bookingRepository.findOne({
-          where: { id: booking.id, organizationId },
-          relations: ['resource', 'user'],
-        });
-
-        if (!bookingWithRelations) {
-          skipped.push({
-            startTime: serializedStart,
-            endTime: serializedEnd,
-            reason: 'Booking was created but could not be loaded for confirmation',
-          });
-          continue;
-        }
-
         created.push({
-          id: bookingWithRelations.id,
-          resourceId: bookingWithRelations.resource.id,
-          resourceName: bookingWithRelations.resource.name,
-          resourceType: bookingWithRelations.resource.type,
-          startTime: this.toUtcIsoString(bookingWithRelations.startTime),
-          endTime: this.toUtcIsoString(bookingWithRelations.endTime),
-          userId: bookingWithRelations.user.id,
-          userApartment: bookingWithRelations.user.apartment,
-          userBlock: bookingWithRelations.user.block,
-          bookedOnBehalf: bookingWithRelations.bookedOnBehalf,
-          needTablesAndChairs: bookingWithRelations.needTablesAndChairs,
+          id: booking.id,
+          resourceId: resource.id,
+          resourceName: resource.name,
+          resourceType: resource.type,
+          startTime: this.toUtcIsoString(booking.startTime),
+          endTime: this.toUtcIsoString(booking.endTime),
+          userId: user.id,
+          userApartment: user.apartment,
+          userBlock: user.block,
+          bookedOnBehalf: booking.bookedOnBehalf,
+          needTablesAndChairs: booking.needTablesAndChairs,
         });
       } catch (error) {
-        const reason = error instanceof Error ? error.message : 'Unknown error while creating booking';
         skipped.push({
           startTime: serializedStart,
           endTime: serializedEnd,
-          reason,
+          reason: this.mapBatchSlotErrorReason(error),
         });
       }
     }
@@ -616,6 +613,18 @@ export class BookingService {
     }
   }
 
+  private mapBatchSlotErrorReason(error: unknown): string {
+    if (error instanceof BadRequestException || error instanceof ForbiddenException) {
+      return error.message;
+    }
+
+    const fallbackReason = 'Unable to create booking for this interval';
+    this.logger.warn(
+      `Unexpected error while creating batch booking interval: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
+    return fallbackReason;
+  }
+
   private async createBookingEntity(
     bookingData: {
       resourceId: string;
@@ -627,6 +636,7 @@ export class BookingService {
     userId: string,
     userRole: string,
     organizationId: string,
+    context?: { resource?: Resource; user?: User },
   ) {
     const { resourceId, startTime, endTime, needTablesAndChairs = false, bookedOnBehalf } = bookingData;
 
@@ -646,7 +656,7 @@ export class BookingService {
     const nextEndTime = new Date(endTime);
     this.validateTimeRange(nextStartTime, nextEndTime, 'creating');
 
-    const resource = await this.resourceService.findOne(resourceId, organizationId);
+    const resource = context?.resource ?? await this.resourceService.findOne(resourceId, organizationId);
     if (!resource) {
       this.logger.warn(`Resource not found: ${resourceId}`);
       throw new BadRequestException('Resource not found');
@@ -659,7 +669,7 @@ export class BookingService {
       throw new BadRequestException(isAvailable.message);
     }
 
-    const user = await this.userRepository.findOne({ where: { id: userId, organizationId } });
+    const user = context?.user ?? await this.userRepository.findOne({ where: { id: userId, organizationId } });
     if (!user) {
       this.logger.warn(`User not found: ${userId}`);
       throw new BadRequestException('Invalid user');

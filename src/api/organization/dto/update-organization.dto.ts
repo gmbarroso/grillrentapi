@@ -1,4 +1,5 @@
 import * as Joi from '@hapi/joi';
+import { isDataImageUrl, isHttpUrl } from './logo-url.validation';
 
 export class UpdateOrganizationDto {
   name?: string;
@@ -11,16 +12,6 @@ export class UpdateOrganizationDto {
   closingTime?: string | null;
   logoUrl?: string | null;
 }
-
-const isDataImageUrl = (value: string): boolean => /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=]+$/i.test(value);
-const isHttpUrl = (value: string): boolean => {
-  try {
-    const parsedUrl = new URL(value);
-    return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
-  } catch {
-    return false;
-  }
-};
 
 export const UpdateOrganizationSchema = Joi.object({
   name: Joi.string().trim().min(2).max(120).optional(),
