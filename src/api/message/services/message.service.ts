@@ -370,9 +370,9 @@ export class MessageService {
   }
 
   private categoryLabel(category: Message['category']): string {
-    if (category === 'complaint') return 'Reclamacao';
-    if (category === 'question') return 'Duvida';
-    return 'Sugestao';
+    if (category === 'complaint') return 'Reclamação';
+    if (category === 'question') return 'Dúvida';
+    return 'Sugestão';
   }
 
   private composeAdminMessageEmail(message: Message): string {
