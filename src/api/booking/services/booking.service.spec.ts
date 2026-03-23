@@ -642,6 +642,33 @@ describe('BookingService', () => {
       expect(result.booking.startTime).toBe('2026-06-11T10:00:00.000Z');
       expect(result.booking.endTime).toBe('2026-06-11T11:00:00.000Z');
     });
+
+    it('normalizes bookedOnBehalf during admin update', async () => {
+      const booking = {
+        id: 'booking-1',
+        user: { id: 'owner-1' },
+        resource: { id: 'resource-1' },
+        startTime: new Date('2026-06-10T10:00:00.000Z'),
+        endTime: new Date('2026-06-10T11:00:00.000Z'),
+      } as unknown as Booking;
+
+      jest.spyOn(bookingRepository, 'findOne').mockResolvedValue(booking);
+      jest.spyOn(resourceService, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hall' } as Resource);
+      jest.spyOn(service, 'checkAvailability').mockResolvedValue({ available: true, message: 'Available' });
+      jest.spyOn(bookingRepository, 'save').mockResolvedValue(booking);
+
+      await service.update(
+        'booking-1',
+        {
+          bookedOnBehalf: '  Family Event  ',
+        },
+        'owner-1',
+        UserRole.ADMIN,
+        ORG_ID,
+      );
+
+      expect(booking.bookedOnBehalf).toBe('Family Event');
+    });
   });
 
   describe('getReservedTimes', () => {

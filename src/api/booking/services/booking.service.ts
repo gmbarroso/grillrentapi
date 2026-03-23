@@ -153,6 +153,12 @@ export class BookingService {
     organizationId: string,
   ) {
     this.logger.log(`Updating booking ID: ${bookingId} by user ID: ${userId}`);
+    const hasBookedOnBehalfField = Object.prototype.hasOwnProperty.call(updateBookingDto, 'bookedOnBehalf');
+    const normalizedBookedOnBehalf =
+      hasBookedOnBehalfField && typeof updateBookingDto.bookedOnBehalf === 'string'
+        ? updateBookingDto.bookedOnBehalf.trim()
+        : undefined;
+    const effectiveBookedOnBehalf = normalizedBookedOnBehalf ? normalizedBookedOnBehalf : undefined;
 
     const booking = await this.bookingRepository.findOne({
       where: { id: bookingId, organizationId },
@@ -168,13 +174,13 @@ export class BookingService {
       throw new ForbiddenException('You are not authorized to update this booking');
     }
 
-    if (updateBookingDto.bookedOnBehalf && userRole !== UserRole.ADMIN) {
+    if (effectiveBookedOnBehalf && userRole !== UserRole.ADMIN) {
       this.logger.warn(`User ID: ${userId} is not authorized to set bookedOnBehalf`);
       throw new ForbiddenException('Only admins can set bookedOnBehalf');
     }
 
-    if (updateBookingDto.bookedOnBehalf && updateBookingDto.bookedOnBehalf.length > 50) {
-      this.logger.warn(`Invalid value for bookedOnBehalf: ${updateBookingDto.bookedOnBehalf}`);
+    if (effectiveBookedOnBehalf && effectiveBookedOnBehalf.length > 50) {
+      this.logger.warn(`Invalid value for bookedOnBehalf: ${effectiveBookedOnBehalf}`);
       throw new BadRequestException('bookedOnBehalf must be a string with a maximum length of 50 characters');
     }
 
@@ -209,8 +215,8 @@ export class BookingService {
       booking.needTablesAndChairs = updateBookingDto.needTablesAndChairs;
     }
 
-    if (userRole === UserRole.ADMIN && Object.prototype.hasOwnProperty.call(updateBookingDto, 'bookedOnBehalf')) {
-      booking.bookedOnBehalf = updateBookingDto.bookedOnBehalf || undefined;
+    if (userRole === UserRole.ADMIN && hasBookedOnBehalfField) {
+      booking.bookedOnBehalf = effectiveBookedOnBehalf;
     }
 
     await this.bookingRepository.save(booking);
