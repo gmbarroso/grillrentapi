@@ -21,7 +21,6 @@ describe('MessageController', () => {
             findAllForResident: jest.fn(),
             getUnreadState: jest.fn(),
             markAsRead: jest.fn(),
-            ingestInboundEmailReply: jest.fn(),
             deleteAsAdmin: jest.fn(),
           },
         },
@@ -103,29 +102,6 @@ describe('MessageController', () => {
         { page: 1, limit: 20 } as any,
       ),
     ).rejects.toThrow(ForbiddenException);
-  });
-
-  it('forwards inbound email ingestion request', async () => {
-    service.ingestInboundEmailReply.mockResolvedValue({ created: true, reason: null, replyId: 'reply-1' });
-
-    await expect(
-      controller.ingestInboundEmailReply(
-        {
-          organizationId: '9dd02335-74fa-487b-99f3-f3e6f9fba2af',
-          messageId: '11111111-1111-4111-8111-111111111111',
-          fromEmail: 'resident@example.com',
-          content: 'Resposta',
-        } as any,
-        'secret-token',
-      ),
-    ).resolves.toEqual({ created: true, reason: null, replyId: 'reply-1' });
-
-    expect(service.ingestInboundEmailReply).toHaveBeenCalledWith(
-      expect.objectContaining({
-        fromEmail: 'resident@example.com',
-      }),
-      'secret-token',
-    );
   });
 
   it('allows admin to delete message', async () => {

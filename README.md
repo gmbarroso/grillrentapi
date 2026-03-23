@@ -65,23 +65,6 @@ $ npm run test:cov
 - `GET /messages/unread-count`: Contador de não lidas.
 - `POST /messages/:id/mark-read`: Marca mensagem como lida.
 - `POST /messages/:id/replies`: Responde mensagem.
-- `POST /messages/inbound/email`: Ingestão de resposta por email (thread por headers + fallback por token assinado no plus-address).
-
-### Threading de Email Inbound (Contato)
-
-- Estratégia de resolução:
-  1. `In-Reply-To` / `References` (IDs de thread do provider).
-  2. Fallback por token assinado em `Reply-To` no formato `faleconosco+gr.<token>@dominio` (compatível com legado `+grillrent.<token>`).
-- Segurança:
-  - Token HMAC-SHA256 com `CONTACT_EMAIL_REPLY_TOKEN_SECRET`.
-  - Expiração via `CONTACT_EMAIL_REPLY_TOKEN_TTL_HOURS` (ex: `720`).
-  - Base de reply-to obrigatório em `CONTACT_EMAIL_REPLY_BASE_ADDRESS`.
-  - Validação estrita do remetente (`fromEmail`) contra o morador esperado.
-- Razões de recusa explícitas:
-  - `thread_not_found`
-  - `invalid_reply_token`
-  - `sender_mismatch`
-  - `duplicate_external_message`
 
 ### Configuração WhatsApp
 - `GET /whatsapp/settings`: Lê settings por organização.

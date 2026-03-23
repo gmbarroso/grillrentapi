@@ -4,7 +4,6 @@ import {
   Delete,
   ForbiddenException,
   Get,
-  Headers,
   Param,
   Post,
   Query,
@@ -16,7 +15,6 @@ import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { JoiValidationPipe } from '../../../shared/pipes/joi-validation.pipe';
 import { UserRole } from '../../user/entities/user.entity';
 import { CreateMessageDto, CreateMessageSchema } from '../dto/create-message.dto';
-import { IngestInboundEmailReplyDto, IngestInboundEmailReplySchema } from '../dto/ingest-inbound-email-reply.dto';
 import { QueryMessagesDto, QueryMessagesSchema } from '../dto/query-messages.dto';
 import { Message } from '../entities/message.entity';
 import { MessageService } from '../services/message.service';
@@ -92,14 +90,6 @@ export class MessageController {
     }
 
     return this.messageService.markAsRead(id, req.user.organizationId);
-  }
-
-  @Post('inbound/email')
-  async ingestInboundEmailReply(
-    @Body(new JoiValidationPipe(IngestInboundEmailReplySchema)) data: IngestInboundEmailReplyDto,
-    @Headers('x-contact-inbound-secret') inboundSecret?: string,
-  ): Promise<{ created: boolean; reason: string | null; replyId: string | null }> {
-    return this.messageService.ingestInboundEmailReply(data, inboundSecret);
   }
 
   @UseGuards(JwtAuthGuard)
