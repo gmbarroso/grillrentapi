@@ -12,11 +12,18 @@ export class UpdateOrganizationDto {
   logoUrl?: string | null;
 }
 
-const isDataImageUrl = (value: string): boolean => /^data:image\/(?:png|jpeg|jpg|svg\+xml);base64,[a-z0-9+/=]+$/i.test(value);
-const isHttpUrl = (value: string): boolean => /^https?:\/\//i.test(value);
+const isDataImageUrl = (value: string): boolean => /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=]+$/i.test(value);
+const isHttpUrl = (value: string): boolean => {
+  try {
+    const parsedUrl = new URL(value);
+    return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
 
 export const UpdateOrganizationSchema = Joi.object({
-  name: Joi.string().trim().max(120).allow('').optional(),
+  name: Joi.string().trim().min(2).max(120).optional(),
   address: Joi.string().max(1000).allow('', null).optional(),
   email: Joi.string().email().allow('', null).optional(),
   phone: Joi.string().max(40).allow('', null).optional(),

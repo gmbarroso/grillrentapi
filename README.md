@@ -64,7 +64,6 @@ $ npm run test:cov
 - `GET /messages/admin`: Inbox de mensagens para admins.
 - `GET /messages/unread-count`: Contador de não lidas.
 - `POST /messages/:id/mark-read`: Marca mensagem como lida.
-- `POST /messages/:id/replies`: Responde mensagem.
 
 ### Configuração WhatsApp
 - `GET /whatsapp/settings`: Lê settings por organização.

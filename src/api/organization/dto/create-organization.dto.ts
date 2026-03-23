@@ -13,8 +13,15 @@ export class CreateOrganizationDto {
   logoUrl?: string;
 }
 
-const isDataImageUrl = (value: string): boolean => /^data:image\/(?:png|jpeg|jpg|svg\+xml);base64,[a-z0-9+/=]+$/i.test(value);
-const isHttpUrl = (value: string): boolean => /^https?:\/\//i.test(value);
+const isDataImageUrl = (value: string): boolean => /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=]+$/i.test(value);
+const isHttpUrl = (value: string): boolean => {
+  try {
+    const parsedUrl = new URL(value);
+    return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
 
 export const CreateOrganizationSchema = Joi.object({
   name: Joi.string().trim().min(2).max(120).required(),

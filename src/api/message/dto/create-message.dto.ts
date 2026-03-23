@@ -3,7 +3,7 @@ import { ContactMessageCategory } from '../entities/message.entity';
 
 const MAX_ATTACHMENTS = 5;
 const MAX_ATTACHMENT_SIZE_BYTES = 1 * 1024 * 1024;
-const IMAGE_DATA_URL_REGEX = /^data:image\/(?:png|jpeg|jpg|webp|gif|svg\+xml);base64,[a-z0-9+/=]+$/i;
+const IMAGE_DATA_URL_REGEX = /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=]+$/i;
 
 const estimateDataUrlBytes = (dataUrl: string): number => {
   const commaIndex = dataUrl.indexOf(',');
