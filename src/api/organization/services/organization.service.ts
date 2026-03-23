@@ -1,7 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateOrganizationDto } from '../dto/create-organization.dto';
+import { UpdateOrganizationDto } from '../dto/update-organization.dto';
 import { Organization } from '../entities/organization.entity';
 
 @Injectable()
@@ -28,6 +29,7 @@ export class OrganizationService {
       address: this.normalizeOptional(createOrganizationDto.address),
       email: this.normalizeOptional(createOrganizationDto.email),
       phone: this.normalizeOptional(createOrganizationDto.phone),
+      businessHours: this.normalizeOptional(createOrganizationDto.businessHours),
       timezone: createOrganizationDto.timezone || 'America/Sao_Paulo',
       openingTime: this.normalizeOptional(createOrganizationDto.openingTime),
       closingTime: this.normalizeOptional(createOrganizationDto.closingTime),
@@ -59,10 +61,63 @@ export class OrganizationService {
     return organization;
   }
 
+  async findById(id: string): Promise<Organization> {
+    const organization = await this.organizationRepository.findOne({ where: { id } });
+    if (!organization) {
+      throw new NotFoundException('Organization not found');
+    }
+    return organization;
+  }
+
+  async updateById(id: string, updateOrganizationDto: UpdateOrganizationDto): Promise<Organization> {
+    const organization = await this.findById(id);
+
+    if (updateOrganizationDto.name !== undefined) {
+      const normalizedName = updateOrganizationDto.name.trim();
+      if (!normalizedName) {
+        throw new BadRequestException('Organization name cannot be empty');
+      }
+      organization.name = normalizedName;
+    }
+
+    if (updateOrganizationDto.address !== undefined) {
+      organization.address = this.normalizeNullable(updateOrganizationDto.address);
+    }
+    if (updateOrganizationDto.email !== undefined) {
+      organization.email = this.normalizeNullable(updateOrganizationDto.email);
+    }
+    if (updateOrganizationDto.phone !== undefined) {
+      organization.phone = this.normalizeNullable(updateOrganizationDto.phone);
+    }
+    if (updateOrganizationDto.businessHours !== undefined) {
+      organization.businessHours = this.normalizeNullable(updateOrganizationDto.businessHours);
+    }
+    if (updateOrganizationDto.timezone !== undefined) {
+      organization.timezone = updateOrganizationDto.timezone.trim() || organization.timezone;
+    }
+    if (updateOrganizationDto.openingTime !== undefined) {
+      organization.openingTime = this.normalizeNullable(updateOrganizationDto.openingTime);
+    }
+    if (updateOrganizationDto.closingTime !== undefined) {
+      organization.closingTime = this.normalizeNullable(updateOrganizationDto.closingTime);
+    }
+    if (updateOrganizationDto.logoUrl !== undefined) {
+      organization.logoUrl = this.normalizeNullable(updateOrganizationDto.logoUrl);
+    }
+
+    return this.organizationRepository.save(organization);
+  }
+
   private normalizeOptional(value?: string | null): string | undefined {
     if (!value) return undefined;
     const normalized = value.trim();
     return normalized || undefined;
+  }
+
+  private normalizeNullable(value?: string | null): string | null {
+    if (value === undefined || value === null) return null;
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : null;
   }
 
   private normalizeSlug(input: string): string {

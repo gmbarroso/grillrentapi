@@ -69,7 +69,7 @@ describe('BookingService', () => {
       jest.spyOn(bookingRepository, 'save').mockResolvedValue(createdBooking);
 
       const result = await service.create(
-        { ...createBookingDto, bookedOnBehalf: 'Family Event' },
+        { ...createBookingDto, bookedOnBehalf: '  Family Event  ' },
         'user-1',
         UserRole.ADMIN,
         ORG_ID,
@@ -103,7 +103,7 @@ describe('BookingService', () => {
       await expect(service.create(dto, 'user-1', UserRole.RESIDENT, ORG_ID)).rejects.toThrow(BadRequestException);
     });
 
-    it('allows same-day future booking for tennis', async () => {
+    it('allows same-day future booking for hourly resources', async () => {
       const now = Date.now();
       const dto: CreateBookingDto = {
         ...createBookingDto,
@@ -119,7 +119,7 @@ describe('BookingService', () => {
       } as unknown as Booking;
 
       jest.spyOn(service, 'checkAvailability').mockResolvedValue({ available: true, message: 'Available' });
-      jest.spyOn(resourceService, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+      jest.spyOn(resourceService, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hourly' } as Resource);
       jest.spyOn(userRepository, 'findOne').mockResolvedValue({ id: 'user-1', role: UserRole.RESIDENT } as User);
       jest.spyOn(bookingRepository, 'create').mockReturnValue(createdBooking);
       jest.spyOn(bookingRepository, 'save').mockResolvedValue(createdBooking);
@@ -160,6 +160,76 @@ describe('BookingService', () => {
       await expect(
         service.create({ ...createBookingDto, bookedOnBehalf: 'Family Event' }, 'user-1', UserRole.RESIDENT, ORG_ID),
       ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('createBatch', () => {
+    it('creates available slots and skips conflicts with reason', async () => {
+      const slotAStart = new Date('2026-06-10T12:00:00.000Z');
+      const slotAEnd = new Date('2026-06-10T13:00:00.000Z');
+      const slotBStart = new Date('2026-06-11T12:00:00.000Z');
+      const slotBEnd = new Date('2026-06-11T13:00:00.000Z');
+
+      jest.spyOn(resourceService, 'findOne').mockResolvedValue({
+        id: 'resource-1',
+        name: 'Quadra de Tenis',
+        type: 'hourly',
+      } as Resource);
+      jest.spyOn(service, 'checkAvailability')
+        .mockResolvedValueOnce({ available: true, message: 'Available' })
+        .mockResolvedValueOnce({ available: false, message: 'Resource already booked' });
+      jest.spyOn(userRepository, 'findOne').mockResolvedValue({
+        id: 'user-1',
+        apartment: '201',
+        block: 2,
+      } as User);
+      jest.spyOn(bookingRepository, 'create').mockImplementation((payload: any) => ({
+        id: 'booking-1',
+        ...payload,
+      } as Booking));
+      jest.spyOn(bookingRepository, 'save').mockImplementation(async (booking) => booking as Booking);
+
+      const result = await service.createBatch(
+        {
+          resourceId: 'resource-1',
+          slots: [
+            { startTime: slotAStart.toISOString(), endTime: slotAEnd.toISOString() },
+            { startTime: slotBStart.toISOString(), endTime: slotBEnd.toISOString() },
+          ],
+        },
+        'user-1',
+        UserRole.RESIDENT,
+        ORG_ID,
+      );
+
+      expect(result.summary).toEqual({ requested: 2, created: 1, skipped: 1 });
+      expect(result.created).toHaveLength(1);
+      expect(result.skipped).toEqual([
+        {
+          startTime: slotBStart.toISOString(),
+          endTime: slotBEnd.toISOString(),
+          reason: 'Resource already booked',
+        },
+      ]);
+    });
+
+    it('rejects batch booking for non-hourly resources', async () => {
+      jest.spyOn(resourceService, 'findOne').mockResolvedValue({
+        id: 'resource-1',
+        type: 'daily',
+      } as Resource);
+
+      await expect(
+        service.createBatch(
+          {
+            resourceId: 'resource-1',
+            slots: [{ startTime: '2026-06-10T12:00:00.000Z', endTime: '2026-06-10T13:00:00.000Z' }],
+          },
+          'user-1',
+          UserRole.RESIDENT,
+          ORG_ID,
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -336,8 +406,8 @@ describe('BookingService', () => {
       expect(result.message).toContain('already booked by apartment 101');
     });
 
-    it('enforces tennis daily cap of 2 hours per user', async () => {
-      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+    it('enforces hourly daily cap of 2 hours per user', async () => {
+      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hourly' } as Resource);
       jest.spyOn(bookingRepository, 'find').mockResolvedValue([]);
 
       const queryBuilder = {
@@ -368,11 +438,11 @@ describe('BookingService', () => {
         startOfLocalDayUtc: new Date('2026-06-10T03:00:00.000Z'),
       });
       expect(result.available).toBe(false);
-      expect(result.message).toContain('more than 2 total tennis hours');
+      expect(result.message).toContain('more than 2 total hourly hours');
     });
 
-    it('counts overlap with day window for tennis cap', async () => {
-      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+    it('counts overlap with day window for hourly cap', async () => {
+      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hourly' } as Resource);
       jest.spyOn(bookingRepository, 'find').mockResolvedValue([]);
 
       const queryBuilder = {
@@ -398,11 +468,11 @@ describe('BookingService', () => {
       );
 
       expect(result.available).toBe(false);
-      expect(result.message).toContain('more than 2 total tennis hours');
+      expect(result.message).toContain('more than 2 total hourly hours');
     });
 
-    it('allows tennis booking that crosses UTC date but stays on same Sao Paulo local day', async () => {
-      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+    it('allows hourly booking that crosses UTC date but stays on same Sao Paulo local day', async () => {
+      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hourly' } as Resource);
       jest.spyOn(bookingRepository, 'find').mockResolvedValue([]);
 
       const queryBuilder = {
@@ -423,8 +493,8 @@ describe('BookingService', () => {
       expect(result.available).toBe(true);
     });
 
-    it('rejects tennis booking when start and end fall on different Sao Paulo local days', async () => {
-      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+    it('rejects hourly booking when start and end fall on different Sao Paulo local days', async () => {
+      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hourly' } as Resource);
 
       await expect(
         service.checkAvailability(
@@ -437,7 +507,7 @@ describe('BookingService', () => {
     });
 
     it('rejects invalid dates in time range validation', async () => {
-      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'tennis' } as Resource);
+      jest.spyOn(resourceRepository, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hourly' } as Resource);
 
       await expect(
         service.checkAvailability(
@@ -571,6 +641,33 @@ describe('BookingService', () => {
 
       expect(result.booking.startTime).toBe('2026-06-11T10:00:00.000Z');
       expect(result.booking.endTime).toBe('2026-06-11T11:00:00.000Z');
+    });
+
+    it('normalizes bookedOnBehalf during admin update', async () => {
+      const booking = {
+        id: 'booking-1',
+        user: { id: 'owner-1' },
+        resource: { id: 'resource-1' },
+        startTime: new Date('2026-06-10T10:00:00.000Z'),
+        endTime: new Date('2026-06-10T11:00:00.000Z'),
+      } as unknown as Booking;
+
+      jest.spyOn(bookingRepository, 'findOne').mockResolvedValue(booking);
+      jest.spyOn(resourceService, 'findOne').mockResolvedValue({ id: 'resource-1', type: 'hall' } as Resource);
+      jest.spyOn(service, 'checkAvailability').mockResolvedValue({ available: true, message: 'Available' });
+      jest.spyOn(bookingRepository, 'save').mockResolvedValue(booking);
+
+      await service.update(
+        'booking-1',
+        {
+          bookedOnBehalf: '  Family Event  ',
+        },
+        'owner-1',
+        UserRole.ADMIN,
+        ORG_ID,
+      );
+
+      expect(booking.bookedOnBehalf).toBe('Family Event');
     });
   });
 

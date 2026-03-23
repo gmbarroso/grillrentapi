@@ -25,6 +25,21 @@ describe('JoiValidationPipe', () => {
     expect(pipe.transform(value, metadata)).toEqual(value);
   });
 
+  it('should return Joi-transformed value', () => {
+    const trimSchema = Joi.object({
+      name: Joi.string().trim().required(),
+      password: Joi.string().trim().min(8).required(),
+    });
+    const trimPipe = new JoiValidationPipe(trimSchema);
+    const value = { name: '  testuser  ', password: '  password  ' };
+    const metadata: ArgumentMetadata = { type: 'body', metatype: Object, data: '' };
+
+    expect(trimPipe.transform(value, metadata)).toEqual({
+      name: 'testuser',
+      password: 'password',
+    });
+  });
+
   it('should throw a BadRequestException if validation fails', () => {
     const value = { name: 'testuser', password: 'short' }; // less than 8 characters
     const metadata: ArgumentMetadata = { type: 'body', metatype: Object, data: '' };

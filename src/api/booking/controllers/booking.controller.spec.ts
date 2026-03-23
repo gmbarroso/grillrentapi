@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BookingController } from './booking.controller';
 import { BookingService } from '../services/booking.service';
 import { CreateBookingDto } from '../dto/create-booking.dto';
+import { CreateBatchBookingDto } from '../dto/create-batch-booking.dto';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { UserRole } from '../../user/entities/user.entity';
 import { ForbiddenException } from '@nestjs/common';
@@ -18,6 +19,7 @@ describe('BookingController', () => {
           provide: BookingService,
           useValue: {
             create: jest.fn(),
+            createBatch: jest.fn(),
             update: jest.fn(),
             findAll: jest.fn(),
             findByUser: jest.fn(),
@@ -54,6 +56,30 @@ describe('BookingController', () => {
 
     await expect(controller.create(dto, req as any)).resolves.toEqual(payload);
     expect(service.create).toHaveBeenCalledWith(dto, 'user-1', UserRole.ADMIN, 'org-1');
+  });
+
+  it('creates batch booking using authenticated user id and role', async () => {
+    const dto: CreateBatchBookingDto = {
+      resourceId: 'resource-1',
+      slots: [
+        {
+          startTime: '2026-06-10T12:00:00.000Z',
+          endTime: '2026-06-10T13:00:00.000Z',
+        },
+      ],
+      bookedOnBehalf: '201',
+    };
+    const req = { user: { id: 'user-1', role: UserRole.ADMIN, organizationId: 'org-1' } };
+    const payload = {
+      message: 'Batch booking processed',
+      summary: { requested: 1, created: 1, skipped: 0 },
+      created: [],
+      skipped: [],
+    };
+    service.createBatch.mockResolvedValue(payload as any);
+
+    await expect(controller.createBatch(dto, req as any)).resolves.toEqual(payload);
+    expect(service.createBatch).toHaveBeenCalledWith(dto, 'user-1', UserRole.ADMIN, 'org-1');
   });
 
   it('forwards findAll query params with defaults', async () => {

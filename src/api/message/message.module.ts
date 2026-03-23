@@ -7,7 +7,6 @@ import { MessageReply } from './entities/message-reply.entity';
 import { OrganizationContactEmailSettings } from './entities/organization-contact-email-settings.entity';
 import { MessageService } from './services/message.service';
 import { ContactEmailSettingsService } from './services/contact-email-settings.service';
-import { EmailReplyTokenService } from './services/email-reply-token.service';
 import { User } from '../user/entities/user.entity';
 import { EmailModule } from '../../shared/email/email.module';
 import { UserModule } from '../user/user.module';
@@ -15,7 +14,7 @@ import { UserModule } from '../user/user.module';
 @Module({
   imports: [TypeOrmModule.forFeature([Message, MessageReply, User, OrganizationContactEmailSettings]), EmailModule, UserModule],
   controllers: [MessageController, ContactEmailSettingsController],
-  providers: [MessageService, ContactEmailSettingsService, EmailReplyTokenService],
-  exports: [MessageService, ContactEmailSettingsService, EmailReplyTokenService],
+  providers: [MessageService, ContactEmailSettingsService],
+  exports: [MessageService, ContactEmailSettingsService],
 })
 export class MessageModule {}

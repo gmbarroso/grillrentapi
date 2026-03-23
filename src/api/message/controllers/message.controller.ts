@@ -4,7 +4,6 @@ import {
   Delete,
   ForbiddenException,
   Get,
-  Headers,
   Param,
   Post,
   Query,
@@ -16,11 +15,8 @@ import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { JoiValidationPipe } from '../../../shared/pipes/joi-validation.pipe';
 import { UserRole } from '../../user/entities/user.entity';
 import { CreateMessageDto, CreateMessageSchema } from '../dto/create-message.dto';
-import { CreateMessageReplyDto, CreateMessageReplySchema } from '../dto/create-message-reply.dto';
-import { IngestInboundEmailReplyDto, IngestInboundEmailReplySchema } from '../dto/ingest-inbound-email-reply.dto';
 import { QueryMessagesDto, QueryMessagesSchema } from '../dto/query-messages.dto';
 import { Message } from '../entities/message.entity';
-import { MessageReply } from '../entities/message-reply.entity';
 import { MessageService } from '../services/message.service';
 
 interface AuthenticatedRequest extends Request {
@@ -94,42 +90,6 @@ export class MessageController {
     }
 
     return this.messageService.markAsRead(id, req.user.organizationId);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Post(':id/replies')
-  async replyAsAdmin(
-    @Param('id') id: string,
-    @Body(new JoiValidationPipe(CreateMessageReplySchema)) data: CreateMessageReplyDto,
-    @Req() req: AuthenticatedRequest,
-  ): Promise<MessageReply> {
-    if (req.user.role !== UserRole.ADMIN) {
-      throw new ForbiddenException('You do not have permission to reply messages');
-    }
-
-    return this.messageService.replyAsAdmin(id, data, req.user.id, req.user.name, req.user.organizationId);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Post(':id/replies/mine')
-  async replyAsResident(
-    @Param('id') id: string,
-    @Body(new JoiValidationPipe(CreateMessageReplySchema)) data: CreateMessageReplyDto,
-    @Req() req: AuthenticatedRequest,
-  ): Promise<MessageReply> {
-    if (req.user.role !== UserRole.RESIDENT) {
-      throw new ForbiddenException('You do not have permission to reply as resident');
-    }
-
-    return this.messageService.replyAsResident(id, data, req.user.id, req.user.name, req.user.organizationId);
-  }
-
-  @Post('inbound/email')
-  async ingestInboundEmailReply(
-    @Body(new JoiValidationPipe(IngestInboundEmailReplySchema)) data: IngestInboundEmailReplyDto,
-    @Headers('x-contact-inbound-secret') inboundSecret?: string,
-  ): Promise<{ created: boolean; reason: string | null; replyId: string | null }> {
-    return this.messageService.ingestInboundEmailReply(data, inboundSecret);
   }
 
   @UseGuards(JwtAuthGuard)

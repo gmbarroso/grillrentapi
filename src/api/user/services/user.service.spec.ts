@@ -27,6 +27,7 @@ describe('UserService', () => {
           useValue: {
             findOne: jest.fn(),
             save: jest.fn(),
+            createQueryBuilder: jest.fn(),
           },
         },
         {
@@ -266,7 +267,90 @@ describe('UserService', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
+  it('requires onboarding again when resident has pending email verification', async () => {
+    userRepository.findOne.mockResolvedValue({
+      id: 'user-1',
+      name: 'Resident',
+      email: 'resident@example.com',
+      emailVerifiedAt: new Date('2026-03-20T10:00:00.000Z'),
+      pendingEmail: 'new-email@example.com',
+      mustChangePassword: false,
+      role: UserRole.RESIDENT,
+      apartment: '101',
+      block: 1,
+      organizationId: 'org-1',
+    } as User);
+
+    const result = await service.getProfile('user-1', 'org-1');
+    expect(result.onboarding).toEqual({
+      mustProvideEmail: false,
+      mustVerifyEmail: true,
+      mustChangePassword: false,
+      onboardingRequired: true,
+      isOnboardingComplete: false,
+    });
+  });
+
   it('wires org SMTP repository dependency (sanity)', async () => {
     expect(organizationContactEmailSettingsRepository.findOne).not.toHaveBeenCalled();
+  });
+
+  it('marks first access tour as completed with max version semantics', async () => {
+    const updateBuilder = {
+      update: jest.fn().mockReturnThis(),
+      set: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      setParameters: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue(undefined),
+    };
+    userRepository.createQueryBuilder.mockReturnValue(updateBuilder as any);
+
+    userRepository.findOne
+      .mockResolvedValueOnce({
+        id: 'user-1',
+        organizationId: 'org-1',
+        role: UserRole.RESIDENT,
+        firstAccessTourVersionCompleted: 2,
+      } as User)
+      .mockResolvedValueOnce({
+        id: 'user-1',
+        organizationId: 'org-1',
+        role: UserRole.RESIDENT,
+        firstAccessTourVersionCompleted: 2,
+      } as User);
+
+    const result = await service.completeFirstAccessTour('user-1', 'org-1', { version: 2 });
+    expect(result).toEqual({
+      message: 'First access tour marked as completed',
+      tour: { firstAccessTourVersionCompleted: 2 },
+    });
+
+    await service.completeFirstAccessTour('user-1', 'org-1', { version: 1 });
+
+    expect(updateBuilder.set).toHaveBeenCalledWith({
+      firstAccessTourVersionCompleted: expect.any(Function),
+    });
+    const firstSetCall = updateBuilder.set.mock.calls[0][0];
+    const expressionFactory = firstSetCall.firstAccessTourVersionCompleted as () => string;
+    expect(expressionFactory()).toContain('"firstAccessTourVersionCompleted"');
+    expect(updateBuilder.setParameters).toHaveBeenCalledWith({ requestedVersion: 1 });
+    expect(updateBuilder.execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('resets first access tour state', async () => {
+    userRepository.findOne.mockResolvedValue({
+      id: 'user-1',
+      organizationId: 'org-1',
+      role: UserRole.RESIDENT,
+      firstAccessTourVersionCompleted: 3,
+    } as User);
+    userRepository.save.mockImplementation(async (value) => value as User);
+
+    const result = await service.resetFirstAccessTour('user-1', 'org-1');
+    expect(result).toEqual({
+      message: 'First access tour reset successfully',
+      tour: { firstAccessTourVersionCompleted: null },
+    });
   });
 });

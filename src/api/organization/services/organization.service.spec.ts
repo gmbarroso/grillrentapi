@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { OrganizationService } from './organization.service';
 
 describe('OrganizationService', () => {
@@ -51,5 +51,83 @@ describe('OrganizationService', () => {
     });
 
     expect(result.organization.slug).toBe('condominio-central');
+  });
+
+  it('updates organization identity fields by id', async () => {
+    organizationRepository.findOne.mockResolvedValue({
+      id: 'org-1',
+      name: 'Original',
+      timezone: 'America/Sao_Paulo',
+    });
+
+    const result = await service.updateById('org-1', {
+      name: 'Condominio Atualizado',
+      businessHours: 'Segunda a sexta, das 9h as 18h',
+      logoUrl: 'https://example.com/logo.png',
+    });
+
+    expect(organizationRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'org-1',
+        name: 'Condominio Atualizado',
+        businessHours: 'Segunda a sexta, das 9h as 18h',
+        logoUrl: 'https://example.com/logo.png',
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 'org-1',
+      }),
+    );
+  });
+
+  it('rejects blank organization name on update', async () => {
+    organizationRepository.findOne.mockResolvedValue({
+      id: 'org-1',
+      name: 'Original',
+      logoUrl: 'https://example.com/logo.png',
+      address: 'Rua A',
+      timezone: 'America/Sao_Paulo',
+    });
+
+    await expect(
+      service.updateById('org-1', {
+        name: '',
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('persists nullable identity fields without blanking name', async () => {
+    organizationRepository.findOne.mockResolvedValue({
+      id: 'org-1',
+      name: 'Original',
+      logoUrl: 'https://example.com/logo.png',
+      address: 'Rua A',
+      timezone: 'America/Sao_Paulo',
+    });
+
+    await service.updateById('org-1', {
+      logoUrl: '',
+      address: '',
+      email: null,
+      phone: '   ',
+      businessHours: '',
+      openingTime: null,
+      closingTime: '',
+    });
+
+    expect(organizationRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'org-1',
+        name: 'Original',
+        logoUrl: null,
+        address: null,
+        email: null,
+        phone: null,
+        businessHours: null,
+        openingTime: null,
+        closingTime: null,
+      }),
+    );
   });
 });

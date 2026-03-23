@@ -126,7 +126,7 @@ export class WhatsappWebhookService {
     }
 
     const notice = this.noticeRepository.create({
-      title: 'Aviso da administracao (WhatsApp)',
+      title: 'Aviso da administração (WhatsApp)',
       subtitle: this.trim(`Enviado por ${extracted.senderName?.trim() || extracted.senderJid}`, 255),
       content: normalizedText,
       organizationId: binding.organizationId,
