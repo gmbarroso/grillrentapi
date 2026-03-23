@@ -594,14 +594,18 @@ export class UserService {
   ): Promise<SendEmailResult> {
     const smtpConfig = await this.resolveOrganizationSmtpConfig(organizationId);
     if (!smtpConfig) {
-      this.logger.warn(
-        `Organization SMTP not configured for onboarding email (organizationId=${organizationId}). Falling back to default SMTP provider.`,
-      );
+      const errorMessage = `Organization SMTP not configured for onboarding email (organizationId=${organizationId})`;
+      this.logger.error(errorMessage);
+      return {
+        status: 'failed',
+        providerMessageId: null,
+        errorMessage,
+      };
     }
 
     return this.emailService.send({
       to: [recipientEmail],
-      from: smtpConfig?.fromHeader,
+      from: smtpConfig.fromHeader,
       subject: 'Verify your email',
       text: [
         `Hello ${userName},`,
@@ -611,7 +615,7 @@ export class UserService {
         '',
         'If you did not request this change, ignore this message.',
       ].join('\n'),
-      smtp: smtpConfig?.smtp,
+      smtp: smtpConfig.smtp,
     });
   }
 }

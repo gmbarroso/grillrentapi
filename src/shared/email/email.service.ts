@@ -41,6 +41,9 @@ export interface SendEmailResult {
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
+  private static readonly DEFAULT_SMTP_CONNECTION_TIMEOUT_MS = 8000;
+  private static readonly DEFAULT_SMTP_GREETING_TIMEOUT_MS = 8000;
+  private static readonly DEFAULT_SMTP_SOCKET_TIMEOUT_MS = 12000;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -83,6 +86,7 @@ export class EmailService {
     ).trim();
     const defaultFrom = (this.configService.get<string>('SMTP_FROM') || username).trim();
     const from = input.from?.trim() || defaultFrom;
+    const { connectionTimeoutMs, greetingTimeoutMs, socketTimeoutMs } = this.resolveSmtpTimeouts();
 
     if (!username || !password) {
       return {
@@ -105,6 +109,9 @@ export class EmailService {
         host,
         port,
         secure,
+        connectionTimeout: connectionTimeoutMs,
+        greetingTimeout: greetingTimeoutMs,
+        socketTimeout: socketTimeoutMs,
         auth: {
           user: username,
           pass: password,
@@ -166,12 +173,16 @@ export class EmailService {
         errorMessage: 'Organization SMTP configuration is incomplete',
       };
     }
+    const { connectionTimeoutMs, greetingTimeoutMs, socketTimeoutMs } = this.resolveSmtpTimeouts();
 
     try {
       const transporter = nodemailer.createTransport({
         host: smtp.host,
         port: smtp.port,
         secure: smtp.secure,
+        connectionTimeout: connectionTimeoutMs,
+        greetingTimeout: greetingTimeoutMs,
+        socketTimeout: socketTimeoutMs,
         auth: {
           user: smtp.user,
           pass: smtp.password,
@@ -209,5 +220,39 @@ export class EmailService {
 
   private trimError(message: string): string {
     return message.length > 1024 ? message.slice(0, 1024) : message;
+  }
+
+  private resolveSmtpTimeouts(): {
+    connectionTimeoutMs: number;
+    greetingTimeoutMs: number;
+    socketTimeoutMs: number;
+  } {
+    const connectionTimeoutMs = this.parsePositiveIntEnv(
+      'SMTP_CONNECTION_TIMEOUT_MS',
+      EmailService.DEFAULT_SMTP_CONNECTION_TIMEOUT_MS,
+    );
+    const greetingTimeoutMs = this.parsePositiveIntEnv(
+      'SMTP_GREETING_TIMEOUT_MS',
+      EmailService.DEFAULT_SMTP_GREETING_TIMEOUT_MS,
+    );
+    const socketTimeoutMs = this.parsePositiveIntEnv(
+      'SMTP_SOCKET_TIMEOUT_MS',
+      EmailService.DEFAULT_SMTP_SOCKET_TIMEOUT_MS,
+    );
+
+    return {
+      connectionTimeoutMs,
+      greetingTimeoutMs,
+      socketTimeoutMs,
+    };
+  }
+
+  private parsePositiveIntEnv(key: string, fallback: number): number {
+    const rawValue = (this.configService.get<string>(key) || '').trim();
+    const parsedValue = Number(rawValue);
+    if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+      return fallback;
+    }
+    return Math.trunc(parsedValue);
   }
 }
