@@ -106,17 +106,26 @@ export class UserService {
     organizationId: string,
     payload: CompleteFirstAccessTourDto,
   ): Promise<{ message: string; tour: UserTourStateDto }> {
-    const user = await this.userRepository.findOne({
+    const requestedVersion = Math.trunc(payload.version);
+
+    await this.userRepository
+      .createQueryBuilder()
+      .update(User)
+      .set({
+        firstAccessTourVersionCompleted: () =>
+          'GREATEST(COALESCE(firstAccessTourVersionCompleted, 0), :requestedVersion)',
+      })
+      .where('id = :userId', { userId })
+      .andWhere('organizationId = :organizationId', { organizationId })
+      .setParameters({ requestedVersion })
+      .execute();
+
+    const updated = await this.userRepository.findOne({
       where: { id: userId, organizationId },
     });
-    if (!user) {
+    if (!updated) {
       throw new UnauthorizedException('User not found');
     }
-
-    const requestedVersion = Math.trunc(payload.version);
-    const currentVersion = user.firstAccessTourVersionCompleted ?? 0;
-    user.firstAccessTourVersionCompleted = Math.max(requestedVersion, currentVersion);
-    const updated = await this.userRepository.save(user);
 
     return {
       message: 'First access tour marked as completed',

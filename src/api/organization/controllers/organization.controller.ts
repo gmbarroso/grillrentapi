@@ -8,7 +8,6 @@ import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { UserRole } from '../../user/entities/user.entity';
 
 @Controller('organizations')
-@UseGuards(InternalServiceAuthGuard)
 export class OrganizationController {
   constructor(private readonly organizationService: OrganizationService) {}
 
@@ -24,6 +23,7 @@ export class OrganizationController {
     return this.organizationService.create(createOrganizationDto);
   }
 
+  @UseGuards(InternalServiceAuthGuard)
   @Get('slug/:slug')
   async findBySlug(@Param('slug') slug: string) {
     return this.organizationService.findBySlug(slug);
