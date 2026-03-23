@@ -69,7 +69,7 @@ describe('BookingService', () => {
       jest.spyOn(bookingRepository, 'save').mockResolvedValue(createdBooking);
 
       const result = await service.create(
-        { ...createBookingDto, bookedOnBehalf: 'Family Event' },
+        { ...createBookingDto, bookedOnBehalf: '  Family Event  ' },
         'user-1',
         UserRole.ADMIN,
         ORG_ID,

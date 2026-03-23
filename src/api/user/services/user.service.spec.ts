@@ -331,6 +331,9 @@ describe('UserService', () => {
     expect(updateBuilder.set).toHaveBeenCalledWith({
       firstAccessTourVersionCompleted: expect.any(Function),
     });
+    const firstSetCall = updateBuilder.set.mock.calls[0][0];
+    const expressionFactory = firstSetCall.firstAccessTourVersionCompleted as () => string;
+    expect(expressionFactory()).toContain('"firstAccessTourVersionCompleted"');
     expect(updateBuilder.setParameters).toHaveBeenCalledWith({ requestedVersion: 1 });
     expect(updateBuilder.execute).toHaveBeenCalledTimes(2);
   });

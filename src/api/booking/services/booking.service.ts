@@ -639,14 +639,16 @@ export class BookingService {
     context?: { resource?: Resource; user?: User },
   ) {
     const { resourceId, startTime, endTime, needTablesAndChairs = false, bookedOnBehalf } = bookingData;
+    const normalizedBookedOnBehalf = typeof bookedOnBehalf === 'string' ? bookedOnBehalf.trim() : undefined;
+    const effectiveBookedOnBehalf = normalizedBookedOnBehalf ? normalizedBookedOnBehalf : undefined;
 
-    if (bookedOnBehalf && userRole !== UserRole.ADMIN) {
+    if (effectiveBookedOnBehalf && userRole !== UserRole.ADMIN) {
       this.logger.warn(`User ID: ${userId} is not authorized to set bookedOnBehalf`);
       throw new ForbiddenException('Only admins can set bookedOnBehalf');
     }
 
-    if (bookedOnBehalf && bookedOnBehalf.length > 50) {
-      this.logger.warn(`Invalid value for bookedOnBehalf: ${bookedOnBehalf}`);
+    if (effectiveBookedOnBehalf && effectiveBookedOnBehalf.length > 50) {
+      this.logger.warn(`Invalid value for bookedOnBehalf: ${effectiveBookedOnBehalf}`);
       throw new BadRequestException('bookedOnBehalf must be a string with a maximum length of 50 characters');
     }
 
@@ -682,7 +684,7 @@ export class BookingService {
       endTime: nextEndTime,
       organizationId,
       needTablesAndChairs,
-      bookedOnBehalf: userRole === UserRole.ADMIN ? bookedOnBehalf || undefined : undefined,
+      bookedOnBehalf: userRole === UserRole.ADMIN ? effectiveBookedOnBehalf : undefined,
     });
 
     await this.bookingRepository.save(booking);

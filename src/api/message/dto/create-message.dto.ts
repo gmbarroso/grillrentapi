@@ -5,14 +5,27 @@ const MAX_ATTACHMENTS = 5;
 const MAX_ATTACHMENT_SIZE_BYTES = 1 * 1024 * 1024;
 const IMAGE_DATA_URL_REGEX = /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=]+$/i;
 
-const estimateDataUrlBytes = (dataUrl: string): number => {
+const getDecodedDataUrlBytes = (dataUrl: string): number => {
   const commaIndex = dataUrl.indexOf(',');
   if (commaIndex < 0) return Number.POSITIVE_INFINITY;
 
-  const base64Payload = dataUrl.slice(commaIndex + 1);
-  const normalizedPayload = base64Payload.replace(/\s/g, '');
-  const paddingChars = normalizedPayload.endsWith('==') ? 2 : normalizedPayload.endsWith('=') ? 1 : 0;
-  return Math.floor((normalizedPayload.length * 3) / 4) - paddingChars;
+  const base64Payload = dataUrl.slice(commaIndex + 1).replace(/\s/g, '');
+  if (!base64Payload || base64Payload.length % 4 !== 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const decodedBuffer = Buffer.from(base64Payload, 'base64');
+  if (decodedBuffer.length === 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const normalizedInput = base64Payload.replace(/=+$/, '');
+  const normalizedDecoded = decodedBuffer.toString('base64').replace(/=+$/, '');
+  if (normalizedInput !== normalizedDecoded) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return decodedBuffer.length;
 };
 
 const contactAttachmentSchema = Joi.string()
@@ -22,7 +35,8 @@ const contactAttachmentSchema = Joi.string()
       return helpers.error('any.invalid');
     }
 
-    if (estimateDataUrlBytes(value) > MAX_ATTACHMENT_SIZE_BYTES) {
+    const decodedBytes = getDecodedDataUrlBytes(value);
+    if (decodedBytes <= 0 || decodedBytes > MAX_ATTACHMENT_SIZE_BYTES) {
       return helpers.error('any.invalid');
     }
 

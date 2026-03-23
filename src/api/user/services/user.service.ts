@@ -113,7 +113,7 @@ export class UserService {
       .update(User)
       .set({
         firstAccessTourVersionCompleted: () =>
-          'GREATEST(COALESCE(firstAccessTourVersionCompleted, 0), :requestedVersion)',
+          'GREATEST(COALESCE("firstAccessTourVersionCompleted", 0), :requestedVersion)',
       })
       .where('id = :userId', { userId })
       .andWhere('organizationId = :organizationId', { organizationId })
