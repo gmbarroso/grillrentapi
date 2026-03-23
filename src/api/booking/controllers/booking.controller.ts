@@ -1,6 +1,7 @@
 import { Controller, Post, Body, Logger, Get, Param, Delete, UseGuards, Req, Query, Put, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { BookingService } from '../services/booking.service';
 import { CreateBookingDto } from '../dto/create-booking.dto';
+import { CreateBatchBookingDto } from '../dto/create-batch-booking.dto';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { Request } from 'express';
 import { User, UserRole } from '../../user/entities/user.entity';
@@ -23,6 +24,16 @@ export class BookingController {
     const organizationId = this.requireOrganizationId(req);
     this.logger.log(`Creating booking for user ID: ${userId}`);
     return this.bookingService.create(createBookingDto, userId, userRole, organizationId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('batch')
+  async createBatch(@Body() createBatchBookingDto: CreateBatchBookingDto, @Req() req: AuthenticatedRequest) {
+    const userId = req.user.id.toString();
+    const userRole = req.user.role;
+    const organizationId = this.requireOrganizationId(req);
+    this.logger.log(`Creating batch booking for user ID: ${userId}`);
+    return this.bookingService.createBatch(createBatchBookingDto, userId, userRole, organizationId);
   }
 
   @UseGuards(JwtAuthGuard)

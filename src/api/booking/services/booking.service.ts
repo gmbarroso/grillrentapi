@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindManyOptions } from 'typeorm';
 import { CreateBookingDto } from '../dto/create-booking.dto';
+import { CreateBatchBookingDto } from '../dto/create-batch-booking.dto';
 import { ResourceService } from '../../resource/services/resource.service';
 import { Booking } from '../entities/booking.entity';
 import { User, UserRole } from '../../user/entities/user.entity';
@@ -31,59 +32,120 @@ export class BookingService {
   async create(createBookingDto: CreateBookingDto, userId: string, userRole: string, organizationId: string) {
     this.logger.log(`Creating booking for user ID: ${userId}`);
 
-    const { resourceId, startTime, endTime, needTablesAndChairs, bookedOnBehalf } = createBookingDto;
+    const booking = await this.createBookingEntity(createBookingDto, userId, userRole, organizationId);
+    this.logger.log(`Booking created successfully: ${booking.id}`);
+    this.logger.log(
+      `Booking created successfully: ${booking.id}, user: ${userId}, resource: ${createBookingDto.resourceId}, start time: ${createBookingDto.startTime}, end time: ${createBookingDto.endTime}, needTablesAndChairs: ${createBookingDto.needTablesAndChairs}`,
+    );
 
-    if (bookedOnBehalf && userRole !== UserRole.ADMIN) {
-      this.logger.warn(`User ID: ${userId} is not authorized to set bookedOnBehalf`);
-      throw new ForbiddenException('Only admins can set bookedOnBehalf');
+    return { message: 'Booking created successfully', booking: this.serializeBookingTimestampFields(booking) };
+  }
+
+  async createBatch(createBatchBookingDto: CreateBatchBookingDto, userId: string, userRole: string, organizationId: string) {
+    this.logger.log(`Creating batch booking for user ID: ${userId}`);
+
+    const { resourceId, slots, bookedOnBehalf, needTablesAndChairs } = createBatchBookingDto;
+
+    if (!Array.isArray(slots) || slots.length === 0) {
+      throw new BadRequestException('slots must contain at least one booking interval');
     }
-
-    if (bookedOnBehalf && bookedOnBehalf.length > 50) {
-      this.logger.warn(`Invalid value for bookedOnBehalf: ${bookedOnBehalf}`);
-      throw new BadRequestException('bookedOnBehalf must be a string with a maximum length of 50 characters');
-    }
-
-    this.logger.log(`Checking if booking is valid for resource ID: ${resourceId}, start time: ${startTime}, end time: ${endTime}`);
-
-    const nextStartTime = new Date(startTime);
-    const nextEndTime = new Date(endTime);
-    this.validateTimeRange(nextStartTime, nextEndTime, 'creating');
 
     const resource = await this.resourceService.findOne(resourceId, organizationId);
     if (!resource) {
       this.logger.warn(`Resource not found: ${resourceId}`);
       throw new BadRequestException('Resource not found');
     }
-    this.validateStartTimePolicy(resource.type, nextStartTime, 'create');
 
-    // Verificar disponibilidade
-    const isAvailable = await this.checkAvailability(resourceId, nextStartTime, nextEndTime, { userId, organizationId });
-
-    if (!isAvailable.available) {
-      this.logger.warn(`Resource ID: ${resourceId} is not available from ${startTime} to ${endTime}`);
-      throw new BadRequestException(isAvailable.message);
+    if (resource.type !== 'hourly') {
+      throw new BadRequestException('Batch booking is only available for hourly resources');
     }
 
-    const user = await this.userRepository.findOne({ where: { id: userId, organizationId } });
-    if (!user) {
-      this.logger.warn(`User not found: ${userId}`);
-      throw new BadRequestException('Invalid user');
+    const created: Array<{
+      id: string;
+      resourceId: string;
+      resourceName: string;
+      resourceType: string;
+      startTime: string;
+      endTime: string;
+      userId: string;
+      userApartment: string;
+      userBlock: number;
+      bookedOnBehalf?: string;
+      needTablesAndChairs?: boolean;
+    }> = [];
+    const skipped: Array<{ startTime: string; endTime: string; reason: string }> = [];
+
+    const sortedSlots = [...slots].sort(
+      (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+    );
+
+    for (const slot of sortedSlots) {
+      const candidateStart = new Date(slot.startTime);
+      const candidateEnd = new Date(slot.endTime);
+      const serializedStart = this.toUtcIsoString(candidateStart);
+      const serializedEnd = this.toUtcIsoString(candidateEnd);
+
+      try {
+        const booking = await this.createBookingEntity(
+          {
+            resourceId,
+            startTime: candidateStart,
+            endTime: candidateEnd,
+            needTablesAndChairs: Boolean(needTablesAndChairs),
+            bookedOnBehalf,
+          },
+          userId,
+          userRole,
+          organizationId,
+        );
+
+        const bookingWithRelations = await this.bookingRepository.findOne({
+          where: { id: booking.id, organizationId },
+          relations: ['resource', 'user'],
+        });
+
+        if (!bookingWithRelations) {
+          skipped.push({
+            startTime: serializedStart,
+            endTime: serializedEnd,
+            reason: 'Booking was created but could not be loaded for confirmation',
+          });
+          continue;
+        }
+
+        created.push({
+          id: bookingWithRelations.id,
+          resourceId: bookingWithRelations.resource.id,
+          resourceName: bookingWithRelations.resource.name,
+          resourceType: bookingWithRelations.resource.type,
+          startTime: this.toUtcIsoString(bookingWithRelations.startTime),
+          endTime: this.toUtcIsoString(bookingWithRelations.endTime),
+          userId: bookingWithRelations.user.id,
+          userApartment: bookingWithRelations.user.apartment,
+          userBlock: bookingWithRelations.user.block,
+          bookedOnBehalf: bookingWithRelations.bookedOnBehalf,
+          needTablesAndChairs: bookingWithRelations.needTablesAndChairs,
+        });
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : 'Unknown error while creating booking';
+        skipped.push({
+          startTime: serializedStart,
+          endTime: serializedEnd,
+          reason,
+        });
+      }
     }
 
-    const booking = this.bookingRepository.create({
-      user: { id: user.id } as User,
-      resource: { id: resource.id } as Resource,
-      startTime: nextStartTime,
-      endTime: nextEndTime,
-      organizationId,
-      needTablesAndChairs,
-      bookedOnBehalf: userRole === UserRole.ADMIN ? bookedOnBehalf || undefined : undefined,
-    });
-    await this.bookingRepository.save(booking);
-    this.logger.log(`Booking created successfully: ${booking.id}`);
-    this.logger.log(`Booking created successfully: ${booking.id}, user: ${user.id}, resource: ${resource.id}, start time: ${startTime}, end time: ${endTime}, needTablesAndChairs: ${needTablesAndChairs}`);
-
-    return { message: 'Booking created successfully', booking: this.serializeBookingTimestampFields(booking) };
+    return {
+      message: 'Batch booking processed',
+      summary: {
+        requested: sortedSlots.length,
+        created: created.length,
+        skipped: skipped.length,
+      },
+      created,
+      skipped,
+    };
   }
 
   async update(
@@ -552,5 +614,68 @@ export class BookingService {
       this.logger.warn(`${bookingLabel} must start and end on the same Sao Paulo date`);
       throw new BadRequestException(`${bookingLabel} must start and end on the same day`);
     }
+  }
+
+  private async createBookingEntity(
+    bookingData: {
+      resourceId: string;
+      startTime: Date | string;
+      endTime: Date | string;
+      needTablesAndChairs?: boolean;
+      bookedOnBehalf?: string;
+    },
+    userId: string,
+    userRole: string,
+    organizationId: string,
+  ) {
+    const { resourceId, startTime, endTime, needTablesAndChairs = false, bookedOnBehalf } = bookingData;
+
+    if (bookedOnBehalf && userRole !== UserRole.ADMIN) {
+      this.logger.warn(`User ID: ${userId} is not authorized to set bookedOnBehalf`);
+      throw new ForbiddenException('Only admins can set bookedOnBehalf');
+    }
+
+    if (bookedOnBehalf && bookedOnBehalf.length > 50) {
+      this.logger.warn(`Invalid value for bookedOnBehalf: ${bookedOnBehalf}`);
+      throw new BadRequestException('bookedOnBehalf must be a string with a maximum length of 50 characters');
+    }
+
+    this.logger.log(`Checking if booking is valid for resource ID: ${resourceId}, start time: ${startTime}, end time: ${endTime}`);
+
+    const nextStartTime = new Date(startTime);
+    const nextEndTime = new Date(endTime);
+    this.validateTimeRange(nextStartTime, nextEndTime, 'creating');
+
+    const resource = await this.resourceService.findOne(resourceId, organizationId);
+    if (!resource) {
+      this.logger.warn(`Resource not found: ${resourceId}`);
+      throw new BadRequestException('Resource not found');
+    }
+    this.validateStartTimePolicy(resource.type, nextStartTime, 'create');
+
+    const isAvailable = await this.checkAvailability(resourceId, nextStartTime, nextEndTime, { userId, organizationId });
+    if (!isAvailable.available) {
+      this.logger.warn(`Resource ID: ${resourceId} is not available from ${startTime} to ${endTime}`);
+      throw new BadRequestException(isAvailable.message);
+    }
+
+    const user = await this.userRepository.findOne({ where: { id: userId, organizationId } });
+    if (!user) {
+      this.logger.warn(`User not found: ${userId}`);
+      throw new BadRequestException('Invalid user');
+    }
+
+    const booking = this.bookingRepository.create({
+      user: { id: user.id } as User,
+      resource: { id: resource.id } as Resource,
+      startTime: nextStartTime,
+      endTime: nextEndTime,
+      organizationId,
+      needTablesAndChairs,
+      bookedOnBehalf: userRole === UserRole.ADMIN ? bookedOnBehalf || undefined : undefined,
+    });
+
+    await this.bookingRepository.save(booking);
+    return booking;
   }
 }
