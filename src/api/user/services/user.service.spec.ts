@@ -266,6 +266,30 @@ describe('UserService', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
+  it('requires onboarding again when resident has pending email verification', async () => {
+    userRepository.findOne.mockResolvedValue({
+      id: 'user-1',
+      name: 'Resident',
+      email: 'resident@example.com',
+      emailVerifiedAt: new Date('2026-03-20T10:00:00.000Z'),
+      pendingEmail: 'new-email@example.com',
+      mustChangePassword: false,
+      role: UserRole.RESIDENT,
+      apartment: '101',
+      block: 1,
+      organizationId: 'org-1',
+    } as User);
+
+    const result = await service.getProfile('user-1', 'org-1');
+    expect(result.onboarding).toEqual({
+      mustProvideEmail: false,
+      mustVerifyEmail: true,
+      mustChangePassword: false,
+      onboardingRequired: true,
+      isOnboardingComplete: false,
+    });
+  });
+
   it('wires org SMTP repository dependency (sanity)', async () => {
     expect(organizationContactEmailSettingsRepository.findOne).not.toHaveBeenCalled();
   });

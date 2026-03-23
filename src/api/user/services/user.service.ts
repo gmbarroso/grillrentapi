@@ -483,9 +483,10 @@ export class UserService {
   private deriveOnboardingStatus(user: User): UserOnboardingStatusDto {
     const hasVerifiedActiveEmail = Boolean(user.email && user.emailVerifiedAt);
     const mustProvideEmail = !user.email && !user.pendingEmail;
-    const mustVerifyEmail = !hasVerifiedActiveEmail && !mustProvideEmail;
+    const hasPendingEmailVerification = Boolean(user.pendingEmail);
+    const mustVerifyEmail = hasPendingEmailVerification || (!hasVerifiedActiveEmail && !mustProvideEmail);
     const mustChangePassword = Boolean(user.mustChangePassword);
-    const onboardingRequired = !hasVerifiedActiveEmail || mustChangePassword;
+    const onboardingRequired = hasPendingEmailVerification || !hasVerifiedActiveEmail || mustChangePassword;
     return {
       mustProvideEmail,
       mustVerifyEmail,
