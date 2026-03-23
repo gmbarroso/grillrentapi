@@ -50,6 +50,7 @@ $ npm run test:cov
 
 ### Reservas
 - `POST /bookings`: Cria uma nova reserva.
+- `POST /bookings/batch`: Cria reservas em lote (somente recurso `hourly`).
 - `GET /bookings`: Obtém todas as reservas.
 - `GET /bookings/user/:userId`: Obtém reservas por usuário.
 - `DELETE /bookings/:id`: Remove uma reserva.
@@ -64,6 +65,7 @@ $ npm run test:cov
 - `GET /messages/admin`: Inbox de mensagens para admins.
 - `GET /messages/unread-count`: Contador de não lidas.
 - `POST /messages/:id/mark-read`: Marca mensagem como lida.
+- Não há endpoint público de replies/inbound email nesta versão.
 
 ### Configuração WhatsApp
 - `GET /whatsapp/settings`: Lê settings por organização.
