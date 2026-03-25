@@ -293,7 +293,6 @@ export class MessageService {
           'X-GrillRent-Organization-Id': message.organizationId || '',
           'X-GrillRent-Sender-User-Id': message.senderUserId,
         },
-        smtp: config.smtp,
       });
 
       return {

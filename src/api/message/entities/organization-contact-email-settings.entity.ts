@@ -31,33 +31,6 @@ export class OrganizationContactEmailSettings {
   @Column({ type: 'varchar', length: 150, nullable: true })
   customReplyTo?: string | null;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  smtpHost?: string | null;
-
-  @Column({ type: 'integer', nullable: true })
-  smtpPort?: number | null;
-
-  @Column({ type: 'boolean', nullable: true })
-  smtpSecure?: boolean | null;
-
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  smtpUser?: string | null;
-
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  smtpFrom?: string | null;
-
-  @Column({ type: 'text', nullable: true })
-  smtpAppPasswordEncrypted?: string | null;
-
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  smtpAppPasswordIv?: string | null;
-
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  smtpAppPasswordAuthTag?: string | null;
-
-  @Column({ type: 'varchar', length: 64, nullable: true })
-  smtpAppPasswordKeyVersion?: string | null;
-
   @CreateDateColumn()
   createdAt: Date;
 

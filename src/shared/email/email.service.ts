@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 export type EmailDeliveryStatus = 'not_requested' | 'pending' | 'sent' | 'failed' | 'skipped';
 
@@ -22,14 +22,6 @@ export interface SendEmailInput {
   headers?: Record<string, string>;
   from?: string;
   attachments?: SendEmailAttachmentInput[];
-  smtp?: {
-    host: string;
-    port: number;
-    secure: boolean;
-    user: string;
-    password: string;
-    from: string;
-  };
 }
 
 export interface SendEmailResult {
@@ -41,9 +33,6 @@ export interface SendEmailResult {
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private static readonly DEFAULT_SMTP_CONNECTION_TIMEOUT_MS = 8000;
-  private static readonly DEFAULT_SMTP_GREETING_TIMEOUT_MS = 8000;
-  private static readonly DEFAULT_SMTP_SOCKET_TIMEOUT_MS = 12000;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -56,43 +45,19 @@ export class EmailService {
       };
     }
 
-    if (input.smtp) {
-      return this.sendViaProvidedSmtp(input, input.smtp);
-    }
-
-    const provider = (this.configService.get<string>('EMAIL_PROVIDER') || 'gmail_smtp').trim().toLowerCase();
-
-    if (provider !== 'gmail_smtp' && provider !== 'smtp') {
-      return {
-        status: 'skipped',
-        providerMessageId: null,
-        errorMessage: `Unsupported EMAIL_PROVIDER: ${provider}`,
-      };
-    }
-
-    return this.sendViaSmtp(input);
+    return this.sendViaResend(input);
   }
 
-  private async sendViaSmtp(input: SendEmailInput): Promise<SendEmailResult> {
-    const host = (this.configService.get<string>('SMTP_HOST') || 'smtp.gmail.com').trim();
-    const port = Number(this.configService.get<string>('SMTP_PORT') || 465);
-    const secureValue = (this.configService.get<string>('SMTP_SECURE') || '').trim().toLowerCase();
-    const secure = secureValue ? secureValue === 'true' || secureValue === '1' : port === 465;
-    const username = (this.configService.get<string>('SMTP_USER') || '').trim();
-    const password = (
-      this.configService.get<string>('SMTP_APP_PASSWORD')
-      || this.configService.get<string>('SMTP_PASSWORD')
-      || ''
-    ).trim();
-    const defaultFrom = (this.configService.get<string>('SMTP_FROM') || username).trim();
+  private async sendViaResend(input: SendEmailInput): Promise<SendEmailResult> {
+    const apiKey = (this.configService.get<string>('RESEND_API_KEY') || '').trim();
+    const defaultFrom = (this.configService.get<string>('RESEND_FROM') || '').trim();
     const from = input.from?.trim() || defaultFrom;
-    const { connectionTimeoutMs, greetingTimeoutMs, socketTimeoutMs } = this.resolveSmtpTimeouts();
 
-    if (!username || !password) {
+    if (!apiKey) {
       return {
         status: 'skipped',
         providerMessageId: null,
-        errorMessage: 'SMTP_USER and SMTP_APP_PASSWORD or SMTP_PASSWORD must be configured',
+        errorMessage: 'RESEND_API_KEY must be configured',
       };
     }
 
@@ -100,116 +65,46 @@ export class EmailService {
       return {
         status: 'skipped',
         providerMessageId: null,
-        errorMessage: 'SMTP_FROM or input.from is required',
+        errorMessage: 'RESEND_FROM or input.from is required',
       };
     }
 
-    try {
-      const transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure,
-        connectionTimeout: connectionTimeoutMs,
-        greetingTimeout: greetingTimeoutMs,
-        socketTimeout: socketTimeoutMs,
-        auth: {
-          user: username,
-          pass: password,
-        },
-      });
+    const headers = this.buildProviderHeaders(input);
 
-      const result = await transporter.sendMail({
+    try {
+      const client = new Resend(apiKey);
+      const { data, error } = await client.emails.send({
         from,
-        to: input.to.join(', '),
+        to: input.to,
         subject: input.subject,
         text: input.text,
         html: input.html,
-        attachments: input.attachments,
         replyTo: input.replyTo,
-        inReplyTo: input.inReplyTo,
-        references: input.references,
-        headers: input.headers,
+        attachments: input.attachments?.map((attachment) => ({
+          filename: attachment.filename,
+          content: attachment.content,
+          contentType: attachment.contentType,
+        })),
+        headers: Object.keys(headers).length ? headers : undefined,
       });
+
+      if (error) {
+        this.logger.error(`Resend email send failed: ${error.message}`);
+        return {
+          status: 'failed',
+          providerMessageId: null,
+          errorMessage: this.trimError(error.message),
+        };
+      }
 
       return {
         status: 'sent',
-        providerMessageId: result.messageId || null,
+        providerMessageId: data?.id || null,
         errorMessage: null,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown email provider error';
-      this.logger.error(`SMTP email send failed: ${message}`);
-      return {
-        status: 'failed',
-        providerMessageId: null,
-        errorMessage: this.trimError(message),
-      };
-    }
-  }
-
-  private async sendViaProvidedSmtp(
-    input: SendEmailInput,
-    smtp: {
-      host: string;
-      port: number;
-      secure: boolean;
-      user: string;
-      password: string;
-      from: string;
-    },
-  ): Promise<SendEmailResult> {
-    if (!input.to.length) {
-      return {
-        status: 'skipped',
-        providerMessageId: null,
-        errorMessage: 'No recipients configured',
-      };
-    }
-
-    if (!smtp.user || !smtp.password || !smtp.from || !smtp.host || !smtp.port) {
-      return {
-        status: 'skipped',
-        providerMessageId: null,
-        errorMessage: 'Organization SMTP configuration is incomplete',
-      };
-    }
-    const { connectionTimeoutMs, greetingTimeoutMs, socketTimeoutMs } = this.resolveSmtpTimeouts();
-
-    try {
-      const transporter = nodemailer.createTransport({
-        host: smtp.host,
-        port: smtp.port,
-        secure: smtp.secure,
-        connectionTimeout: connectionTimeoutMs,
-        greetingTimeout: greetingTimeoutMs,
-        socketTimeout: socketTimeoutMs,
-        auth: {
-          user: smtp.user,
-          pass: smtp.password,
-        },
-      });
-
-      const result = await transporter.sendMail({
-        from: input.from?.trim() || smtp.from,
-        to: input.to.join(', '),
-        subject: input.subject,
-        text: input.text,
-        html: input.html,
-        attachments: input.attachments,
-        replyTo: input.replyTo,
-        inReplyTo: input.inReplyTo,
-        references: input.references,
-        headers: input.headers,
-      });
-
-      return {
-        status: 'sent',
-        providerMessageId: result.messageId || null,
-        errorMessage: null,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown email provider error';
-      this.logger.error(`SMTP email send failed: ${message}`);
+      this.logger.error(`Resend email send failed: ${message}`);
       return {
         status: 'failed',
         providerMessageId: null,
@@ -222,37 +117,15 @@ export class EmailService {
     return message.length > 1024 ? message.slice(0, 1024) : message;
   }
 
-  private resolveSmtpTimeouts(): {
-    connectionTimeoutMs: number;
-    greetingTimeoutMs: number;
-    socketTimeoutMs: number;
-  } {
-    const connectionTimeoutMs = this.parsePositiveIntEnv(
-      'SMTP_CONNECTION_TIMEOUT_MS',
-      EmailService.DEFAULT_SMTP_CONNECTION_TIMEOUT_MS,
-    );
-    const greetingTimeoutMs = this.parsePositiveIntEnv(
-      'SMTP_GREETING_TIMEOUT_MS',
-      EmailService.DEFAULT_SMTP_GREETING_TIMEOUT_MS,
-    );
-    const socketTimeoutMs = this.parsePositiveIntEnv(
-      'SMTP_SOCKET_TIMEOUT_MS',
-      EmailService.DEFAULT_SMTP_SOCKET_TIMEOUT_MS,
-    );
-
-    return {
-      connectionTimeoutMs,
-      greetingTimeoutMs,
-      socketTimeoutMs,
-    };
-  }
-
-  private parsePositiveIntEnv(key: string, fallback: number): number {
-    const rawValue = (this.configService.get<string>(key) || '').trim();
-    const parsedValue = Number(rawValue);
-    if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-      return fallback;
+  private buildProviderHeaders(input: SendEmailInput): Record<string, string> {
+    const headers: Record<string, string> = { ...(input.headers || {}) };
+    if (input.inReplyTo?.trim()) {
+      headers['In-Reply-To'] = input.inReplyTo.trim();
     }
-    return Math.trunc(parsedValue);
+    if (input.references?.trim()) {
+      headers.References = input.references.trim();
+    }
+    return headers;
   }
+
 }

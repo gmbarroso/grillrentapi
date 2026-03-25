@@ -55,9 +55,6 @@ describe('UserService', () => {
               if (key === 'NODE_ENV') {
                 return 'development';
               }
-              if (key === 'ORG_SMTP_ENCRYPTION_KEY') {
-                return '';
-              }
               return undefined;
             }),
           },
@@ -150,16 +147,51 @@ describe('UserService', () => {
         passwordResetExpiresAt: expect.any(Date),
       }),
     );
-    expect(emailService.send).not.toHaveBeenCalled();
+    expect(emailService.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: ['resident@example.com'],
+        subject: 'Password reset',
+      }),
+    );
+  });
+
+  it('uses organization fromEmail as sender when configured', async () => {
+    organizationRepository.findOne.mockResolvedValue({
+      id: 'org-1',
+      slug: 'condo-a',
+      name: 'Condo A',
+    } as Organization);
+    userRepository.findOne.mockResolvedValue({
+      id: 'user-1',
+      name: 'Resident',
+      email: 'resident@example.com',
+      role: UserRole.RESIDENT,
+      password: 'hashed',
+      organizationId: 'org-1',
+    } as User);
+    organizationContactEmailSettingsRepository.findOne.mockResolvedValue({
+      organizationId: 'org-1',
+      fromName: 'Condo Team',
+      fromEmail: 'faleconosco.condo@seuze.tech',
+    } as OrganizationContactEmailSettings);
+    userRepository.save.mockImplementation(async (value) => value as User);
+
+    await service.requestForgotPassword({
+      organizationSlug: 'condo-a',
+      email: 'resident@example.com',
+    });
+
+    expect(emailService.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: 'Condo Team <faleconosco.condo@seuze.tech>',
+      }),
+    );
   });
 
   it('does not return reset token preview in production/staging', async () => {
     configService.get.mockImplementation((key: string) => {
       if (key === 'NODE_ENV') {
         return 'staging';
-      }
-      if (key === 'ORG_SMTP_ENCRYPTION_KEY') {
-        return '';
       }
       return undefined;
     });
@@ -289,10 +321,6 @@ describe('UserService', () => {
       onboardingRequired: true,
       isOnboardingComplete: false,
     });
-  });
-
-  it('wires org SMTP repository dependency (sanity)', async () => {
-    expect(organizationContactEmailSettingsRepository.findOne).not.toHaveBeenCalled();
   });
 
   it('marks first access tour as completed with max version semantics', async () => {

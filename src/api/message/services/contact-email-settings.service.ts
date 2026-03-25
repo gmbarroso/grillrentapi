@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -8,10 +7,6 @@ import {
   OrganizationContactEmailSettings,
 } from '../entities/organization-contact-email-settings.entity';
 import { ContactEmailSettingsViewDto, UpdateContactEmailSettingsDto } from '../dto/contact-email-settings.dto';
-import {
-  decryptOrganizationSmtpSecret,
-  encryptOrganizationSmtpSecret,
-} from '../../../shared/security/org-smtp-crypto.util';
 
 interface ContactEmailSettingsValidation {
   valid: boolean;
@@ -31,14 +26,6 @@ export type ContactEmailDeliveryConfig =
       recipients: string[];
       from: string | null;
       replyTo: string | null;
-      smtp: {
-        host: string;
-        port: number;
-        secure: boolean;
-        user: string;
-        password: string;
-        from: string;
-      };
       validationErrors: string[];
     };
 
@@ -47,7 +34,6 @@ export class ContactEmailSettingsService {
   constructor(
     @InjectRepository(OrganizationContactEmailSettings)
     private readonly settingsRepository: Repository<OrganizationContactEmailSettings>,
-    private readonly configService: ConfigService,
   ) {}
 
   async getSettings(organizationId: string): Promise<ContactEmailSettingsViewDto> {
@@ -64,11 +50,6 @@ export class ContactEmailSettingsService {
   ): Promise<ContactEmailSettingsViewDto> {
     const existing = await this.settingsRepository.findOne({ where: { organizationId } });
     const payload = this.sanitizePayload(data);
-    const encryptedSecret = payload.smtpAppPasswordProvided
-      ? payload.smtpAppPassword
-        ? encryptOrganizationSmtpSecret(payload.smtpAppPassword, this.configService)
-        : null
-      : null;
 
     const entity = this.settingsRepository.create({
       id: existing?.id,
@@ -79,23 +60,6 @@ export class ContactEmailSettingsService {
       fromEmail: payload.fromEmail,
       replyToMode: payload.replyToMode,
       customReplyTo: payload.customReplyTo,
-      smtpHost: payload.smtpHost,
-      smtpPort: payload.smtpPort,
-      smtpSecure: payload.smtpSecure,
-      smtpUser: payload.smtpUser,
-      smtpFrom: payload.smtpFrom,
-      smtpAppPasswordEncrypted: payload.smtpAppPasswordProvided
-        ? encryptedSecret?.encrypted ?? null
-        : existing?.smtpAppPasswordEncrypted ?? null,
-      smtpAppPasswordIv: payload.smtpAppPasswordProvided
-        ? encryptedSecret?.iv ?? null
-        : existing?.smtpAppPasswordIv ?? null,
-      smtpAppPasswordAuthTag: payload.smtpAppPasswordProvided
-        ? encryptedSecret?.authTag ?? null
-        : existing?.smtpAppPasswordAuthTag ?? null,
-      smtpAppPasswordKeyVersion: payload.smtpAppPasswordProvided
-        ? encryptedSecret?.keyVersion ?? null
-        : existing?.smtpAppPasswordKeyVersion ?? null,
     });
 
     await this.settingsRepository.save(entity);
@@ -125,22 +89,7 @@ export class ContactEmailSettingsService {
       };
     }
 
-    const decryptedPassword = this.decryptSecret(
-      normalized.smtpAppPasswordEncrypted,
-      normalized.smtpAppPasswordIv,
-      normalized.smtpAppPasswordAuthTag,
-      normalized.smtpAppPasswordKeyVersion,
-    );
-    if (!decryptedPassword) {
-      return {
-        shouldSend: false,
-        deliveryMode: normalized.deliveryMode,
-        reason: 'Organization SMTP password is not configured',
-        validationErrors: ['smtpAppPassword is required when email delivery is enabled'],
-      };
-    }
-
-    const from = this.composeFromHeader(normalized.fromName, normalized.smtpFrom || normalized.fromEmail);
+    const from = this.composeFromHeader(normalized.fromName, normalized.fromEmail);
     const replyTo = this.resolveReplyTo(normalized.replyToMode, normalized.customReplyTo, residentEmail ?? null);
 
     return {
@@ -149,16 +98,17 @@ export class ContactEmailSettingsService {
       recipients: normalized.recipientEmails,
       from,
       replyTo,
-      smtp: {
-        host: normalized.smtpHost!,
-        port: normalized.smtpPort!,
-        secure: Boolean(normalized.smtpSecure),
-        user: normalized.smtpUser!,
-        password: decryptedPassword,
-        from: normalized.smtpFrom!,
-      },
       validationErrors: [],
     };
+  }
+
+  async resolveOrganizationSenderFrom(organizationId: string): Promise<string | null> {
+    const settings = await this.settingsRepository.findOne({ where: { organizationId } });
+    const normalized = this.normalizeSettings(settings);
+    if (!normalized.fromEmail || !this.isValidEmail(normalized.fromEmail)) {
+      return null;
+    }
+    return this.composeFromHeader(normalized.fromName, normalized.fromEmail);
   }
 
   private sanitizePayload(data: UpdateContactEmailSettingsDto): {
@@ -168,15 +118,7 @@ export class ContactEmailSettingsService {
     fromEmail: string | null;
     replyToMode: ContactEmailReplyToMode;
     customReplyTo: string | null;
-    smtpHost: string | null;
-    smtpPort: number | null;
-    smtpSecure: boolean | null;
-    smtpUser: string | null;
-    smtpFrom: string | null;
-    smtpAppPassword: string | null;
-    smtpAppPasswordProvided: boolean;
   } {
-    const smtpAppPasswordProvided = Object.prototype.hasOwnProperty.call(data, 'smtpAppPassword');
     return {
       deliveryMode: data.deliveryMode,
       recipientEmails: (data.recipientEmails || []).map((value) => value.trim().toLowerCase()).filter(Boolean),
@@ -184,13 +126,6 @@ export class ContactEmailSettingsService {
       fromEmail: data.fromEmail?.trim().toLowerCase() || null,
       replyToMode: data.replyToMode,
       customReplyTo: data.customReplyTo?.trim().toLowerCase() || null,
-      smtpHost: data.smtpHost?.trim() || null,
-      smtpPort: data.smtpPort ?? null,
-      smtpSecure: data.smtpSecure ?? null,
-      smtpUser: data.smtpUser?.trim() || null,
-      smtpFrom: data.smtpFrom?.trim().toLowerCase() || null,
-      smtpAppPassword: data.smtpAppPassword?.trim() || null,
-      smtpAppPasswordProvided,
     };
   }
 
@@ -201,16 +136,6 @@ export class ContactEmailSettingsService {
     fromEmail: string | null;
     replyToMode: ContactEmailReplyToMode;
     customReplyTo: string | null;
-    smtpHost: string | null;
-    smtpPort: number | null;
-    smtpSecure: boolean | null;
-    smtpUser: string | null;
-    smtpFrom: string | null;
-    smtpAppPasswordEncrypted: string | null;
-    smtpAppPasswordIv: string | null;
-    smtpAppPasswordAuthTag: string | null;
-    smtpAppPasswordKeyVersion: string | null;
-    hasSmtpPassword: boolean;
   } {
     if (!settings) {
       return {
@@ -220,16 +145,6 @@ export class ContactEmailSettingsService {
         fromEmail: null,
         replyToMode: 'resident_email',
         customReplyTo: null,
-        smtpHost: null,
-        smtpPort: null,
-        smtpSecure: null,
-        smtpUser: null,
-        smtpFrom: null,
-        smtpAppPasswordEncrypted: null,
-        smtpAppPasswordIv: null,
-        smtpAppPasswordAuthTag: null,
-        smtpAppPasswordKeyVersion: null,
-        hasSmtpPassword: false,
       };
     }
 
@@ -240,16 +155,6 @@ export class ContactEmailSettingsService {
       fromEmail: settings.fromEmail?.trim().toLowerCase() || null,
       replyToMode: settings.replyToMode,
       customReplyTo: settings.customReplyTo?.trim().toLowerCase() || null,
-      smtpHost: settings.smtpHost?.trim() || null,
-      smtpPort: settings.smtpPort ?? null,
-      smtpSecure: settings.smtpSecure ?? null,
-      smtpUser: settings.smtpUser?.trim() || null,
-      smtpFrom: settings.smtpFrom?.trim().toLowerCase() || null,
-      smtpAppPasswordEncrypted: settings.smtpAppPasswordEncrypted || null,
-      smtpAppPasswordIv: settings.smtpAppPasswordIv || null,
-      smtpAppPasswordAuthTag: settings.smtpAppPasswordAuthTag || null,
-      smtpAppPasswordKeyVersion: settings.smtpAppPasswordKeyVersion || null,
-      hasSmtpPassword: Boolean(settings.smtpAppPasswordEncrypted && settings.smtpAppPasswordIv && settings.smtpAppPasswordAuthTag),
     };
   }
 
@@ -260,12 +165,6 @@ export class ContactEmailSettingsService {
     fromEmail: string | null;
     replyToMode: ContactEmailReplyToMode;
     customReplyTo: string | null;
-    smtpHost: string | null;
-    smtpPort: number | null;
-    smtpSecure: boolean | null;
-    smtpUser: string | null;
-    smtpFrom: string | null;
-    hasSmtpPassword: boolean;
   }): ContactEmailSettingsValidation {
     const errors: string[] = [];
 
@@ -289,32 +188,6 @@ export class ContactEmailSettingsService {
           errors.push('customReplyTo is invalid');
         }
       }
-
-      if (!settings.smtpHost) {
-        errors.push('smtpHost is required when email delivery is enabled');
-      }
-
-      if (!settings.smtpPort) {
-        errors.push('smtpPort is required when email delivery is enabled');
-      }
-
-      if (settings.smtpSecure === null) {
-        errors.push('smtpSecure is required when email delivery is enabled');
-      }
-
-      if (!settings.smtpUser) {
-        errors.push('smtpUser is required when email delivery is enabled');
-      }
-
-      if (!settings.smtpFrom) {
-        errors.push('smtpFrom is required when email delivery is enabled');
-      } else if (!this.isValidEmail(settings.smtpFrom)) {
-        errors.push('smtpFrom is invalid');
-      }
-
-      if (!settings.hasSmtpPassword) {
-        errors.push('smtpAppPassword is required when email delivery is enabled');
-      }
     }
 
     return {
@@ -331,12 +204,6 @@ export class ContactEmailSettingsService {
       fromEmail: string | null;
       replyToMode: ContactEmailReplyToMode;
       customReplyTo: string | null;
-      smtpHost: string | null;
-      smtpPort: number | null;
-      smtpSecure: boolean | null;
-      smtpUser: string | null;
-      smtpFrom: string | null;
-      hasSmtpPassword: boolean;
     },
     validation: ContactEmailSettingsValidation,
   ): ContactEmailSettingsViewDto {
@@ -347,12 +214,6 @@ export class ContactEmailSettingsService {
       fromEmail: settings.fromEmail,
       replyToMode: settings.replyToMode,
       customReplyTo: settings.customReplyTo,
-      smtpHost: settings.smtpHost,
-      smtpPort: settings.smtpPort,
-      smtpSecure: settings.smtpSecure,
-      smtpUser: settings.smtpUser,
-      smtpFrom: settings.smtpFrom,
-      hasSmtpPassword: settings.hasSmtpPassword,
       canSendEmail: settings.deliveryMode === 'in_app_and_email' && validation.valid,
       validationErrors: validation.errors,
     };
@@ -384,20 +245,5 @@ export class ContactEmailSettingsService {
 
   private isValidEmail(value: string): boolean {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-  }
-
-  private decryptSecret(
-    encryptedValue: string | null,
-    ivValue: string | null,
-    authTagValue: string | null,
-    keyVersion: string | null,
-  ): string | null {
-    return decryptOrganizationSmtpSecret(
-      encryptedValue,
-      ivValue,
-      authTagValue,
-      this.configService,
-      keyVersion,
-    );
   }
 }
