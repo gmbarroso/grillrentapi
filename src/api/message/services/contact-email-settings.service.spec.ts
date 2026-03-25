@@ -1,7 +1,6 @@
 import { Repository } from 'typeorm';
 import { ContactEmailSettingsService } from './contact-email-settings.service';
 import { OrganizationContactEmailSettings } from '../entities/organization-contact-email-settings.entity';
-import { ConfigService } from '@nestjs/config';
 
 describe('ContactEmailSettingsService', () => {
   let service: ContactEmailSettingsService;
@@ -24,22 +23,7 @@ describe('ContactEmailSettingsService', () => {
       }),
     } as unknown as jest.Mocked<Repository<OrganizationContactEmailSettings>>;
 
-    const configService = {
-      get: jest.fn((key: string) => {
-        if (key === 'ORG_SMTP_ENCRYPTION_KEY') {
-          return '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
-        }
-        if (key === 'ORG_SMTP_ENCRYPTION_KEY_VERSION') {
-          return 'v1';
-        }
-        if (key === 'NODE_ENV') {
-          return 'test';
-        }
-        return undefined;
-      }),
-    } as unknown as ConfigService;
-
-    service = new ContactEmailSettingsService(repository, configService);
+    service = new ContactEmailSettingsService(repository);
   });
 
   it('returns in_app_only defaults when organization has no settings', async () => {
@@ -50,12 +34,6 @@ describe('ContactEmailSettingsService', () => {
       fromEmail: null,
       replyToMode: 'resident_email',
       customReplyTo: null,
-      smtpHost: null,
-      smtpPort: null,
-      smtpSecure: null,
-      smtpUser: null,
-      smtpFrom: null,
-      hasSmtpPassword: false,
       canSendEmail: false,
       validationErrors: [],
     });
@@ -65,12 +43,8 @@ describe('ContactEmailSettingsService', () => {
     await service.updateSettings('org-1', {
       deliveryMode: 'in_app_and_email',
       recipientEmails: ['Admin@Condo.com'],
-      smtpHost: 'smtp.condo.com',
-      smtpPort: 465,
-      smtpSecure: true,
-      smtpUser: 'mailer@condo.com',
-      smtpFrom: 'noreply@condo.com',
-      smtpAppPassword: 'app-password',
+      fromName: 'Condo Team',
+      fromEmail: 'No-Reply@Condo.com',
       replyToMode: 'resident_email',
     });
 
@@ -79,12 +53,11 @@ describe('ContactEmailSettingsService', () => {
 
     expect(org1.deliveryMode).toBe('in_app_and_email');
     expect(org1.recipientEmails).toEqual(['admin@condo.com']);
-    expect(org1.hasSmtpPassword).toBe(true);
+    expect(org1.fromEmail).toBe('no-reply@condo.com');
     expect(org1.canSendEmail).toBe(true);
 
     expect(org2.deliveryMode).toBe('in_app_only');
     expect(org2.recipientEmails).toEqual([]);
-    expect(org2.hasSmtpPassword).toBe(false);
     expect(org2.canSendEmail).toBe(false);
   });
 
@@ -92,12 +65,7 @@ describe('ContactEmailSettingsService', () => {
     await service.updateSettings('org-1', {
       deliveryMode: 'in_app_and_email',
       recipientEmails: ['admin@condo.com'],
-      smtpHost: 'smtp.condo.com',
-      smtpPort: 465,
-      smtpSecure: true,
-      smtpUser: 'mailer@condo.com',
-      smtpFrom: 'noreply@condo.com',
-      smtpAppPassword: 'app-password',
+      fromEmail: 'faleconosco@seuze.tech',
       replyToMode: 'custom',
       customReplyTo: '',
     });
@@ -108,5 +76,19 @@ describe('ContactEmailSettingsService', () => {
     if (!result.shouldSend) {
       expect(result.validationErrors).toContain('customReplyTo is required when replyToMode is custom');
     }
+  });
+
+  it('builds organization sender header when fromEmail is valid', async () => {
+    await service.updateSettings('org-1', {
+      deliveryMode: 'in_app_and_email',
+      recipientEmails: ['admin@condo.com'],
+      fromName: 'Chacara Seu Ze',
+      fromEmail: 'faleconosco.chacara@seuze.tech',
+      replyToMode: 'resident_email',
+    });
+
+    await expect(service.resolveOrganizationSenderFrom('org-1')).resolves.toBe(
+      'Chacara Seu Ze <faleconosco.chacara@seuze.tech>',
+    );
   });
 });

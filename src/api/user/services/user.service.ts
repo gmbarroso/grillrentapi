@@ -27,7 +27,7 @@ import { ForgotPasswordConfirmDto, ForgotPasswordRequestDto } from '../dto/forgo
 import { EmailService, type SendEmailResult } from '../../../shared/email/email.service';
 import { Organization } from '../../organization/entities/organization.entity';
 import { OrganizationContactEmailSettings } from '../../message/entities/organization-contact-email-settings.entity';
-import { decryptOrganizationSmtpSecret } from '../../../shared/security/org-smtp-crypto.util';
+import { composeFromHeader, isValidEmailAddress, normalizeEmailAddress } from '../../../shared/email/email-address.util';
 
 @Injectable()
 export class UserService {
@@ -383,27 +383,20 @@ export class UserService {
     user.passwordResetExpiresAt = new Date(Date.now() + UserService.PASSWORD_RESET_TTL_MS);
     await this.userRepository.save(user);
 
-    const smtpConfig = await this.resolveOrganizationSmtpConfig(organization.id);
-    if (smtpConfig) {
-      await this.emailService.send({
-        to: [user.email],
-        from: smtpConfig.fromHeader,
-        subject: 'Password reset',
-        text: [
-          `Hello ${user.name},`,
-          '',
-          `Use this token to reset your password: ${plainToken}`,
-          'This token expires in 30 minutes.',
-          '',
-          'If you did not request this change, ignore this message.',
-        ].join('\n'),
-        smtp: smtpConfig.smtp,
-      });
-    } else {
-      this.logger.warn(
-        `Forgot-password email skipped because organization SMTP is not configured (organizationId=${organization.id})`,
-      );
-    }
+    const organizationFrom = await this.resolveOrganizationSenderFrom(organization.id);
+    await this.emailService.send({
+      to: [user.email],
+      from: organizationFrom || undefined,
+      subject: 'Password reset',
+      text: [
+        `Hello ${user.name},`,
+        '',
+        `Use this token to reset your password: ${plainToken}`,
+        'This token expires in 30 minutes.',
+        '',
+        'If you did not request this change, ignore this message.',
+      ].join('\n'),
+    });
 
     if (this.isProductionLike()) {
       return genericResponse;
@@ -512,73 +505,20 @@ export class UserService {
     return safeUser;
   }
 
-  private async resolveOrganizationSmtpConfig(organizationId: string): Promise<{
-    fromHeader: string;
-    smtp: {
-      host: string;
-      port: number;
-      secure: boolean;
-      user: string;
-      password: string;
-      from: string;
-    };
-  } | null> {
+  private async resolveOrganizationSenderFrom(organizationId: string): Promise<string | null> {
     const settings = await this.organizationContactEmailSettingsRepository.findOne({
       where: { organizationId },
     });
-    if (!settings) {
+    if (!settings?.fromEmail) {
       return null;
     }
 
-    const decryptedPassword = this.decryptSmtpPassword(
-      settings.smtpAppPasswordEncrypted || null,
-      settings.smtpAppPasswordIv || null,
-      settings.smtpAppPasswordAuthTag || null,
-      settings.smtpAppPasswordKeyVersion || null,
-    );
-
-    if (
-      !settings.smtpHost
-      || !settings.smtpPort
-      || settings.smtpSecure === null
-      || settings.smtpSecure === undefined
-      || !settings.smtpUser
-      || !settings.smtpFrom
-      || !decryptedPassword
-    ) {
+    const fromEmail = normalizeEmailAddress(settings.fromEmail);
+    if (!fromEmail || !isValidEmailAddress(fromEmail)) {
       return null;
     }
 
-    const fromHeader = settings.fromName?.trim()
-      ? `${settings.fromName.trim()} <${settings.smtpFrom}>`
-      : settings.smtpFrom;
-
-    return {
-      fromHeader,
-      smtp: {
-        host: settings.smtpHost,
-        port: settings.smtpPort,
-        secure: Boolean(settings.smtpSecure),
-        user: settings.smtpUser,
-        password: decryptedPassword,
-        from: settings.smtpFrom,
-      },
-    };
-  }
-
-  private decryptSmtpPassword(
-    encrypted: string | null,
-    iv: string | null,
-    authTag: string | null,
-    keyVersion: string | null,
-  ): string | null {
-    return decryptOrganizationSmtpSecret(
-      encrypted,
-      iv,
-      authTag,
-      this.configService,
-      keyVersion,
-    );
+    return composeFromHeader(settings.fromName || null, fromEmail);
   }
 
   private isProductionLike(): boolean {
@@ -592,20 +532,10 @@ export class UserService {
     recipientEmail: string,
     plainToken: string,
   ): Promise<SendEmailResult> {
-    const smtpConfig = await this.resolveOrganizationSmtpConfig(organizationId);
-    if (!smtpConfig) {
-      const errorMessage = `Organization SMTP not configured for onboarding email (organizationId=${organizationId})`;
-      this.logger.error(errorMessage);
-      return {
-        status: 'failed',
-        providerMessageId: null,
-        errorMessage,
-      };
-    }
-
+    const organizationFrom = await this.resolveOrganizationSenderFrom(organizationId);
     return this.emailService.send({
       to: [recipientEmail],
-      from: smtpConfig.fromHeader,
+      from: organizationFrom || undefined,
       subject: 'Verify your email',
       text: [
         `Hello ${userName},`,
@@ -615,7 +545,7 @@ export class UserService {
         '',
         'If you did not request this change, ignore this message.',
       ].join('\n'),
-      smtp: smtpConfig.smtp,
     });
   }
+
 }
