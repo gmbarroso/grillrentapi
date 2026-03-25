@@ -18,6 +18,7 @@ describe('EmailService', () => {
       get: jest.fn((key: string) => configValues[key]),
     } as unknown as ConfigService;
 
+    (Resend as unknown as jest.Mock).mockClear();
     (Resend as unknown as jest.Mock).mockImplementation(() => ({
       emails: {
         send: mockResendSend,
