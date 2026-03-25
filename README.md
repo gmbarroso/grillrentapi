@@ -21,7 +21,7 @@ $ npm run start:dev
 $ npm run start:prod
 ```
 
-## Configuracao de Email (Resend)
+## Configuração de Email (Resend)
 
 O envio de e-mail usa Resend.
 
@@ -31,9 +31,9 @@ RESEND_FROM=GrillRent <onboarding@seu-dominio-verificado.com>
 ```
 
 Notas:
-- `RESEND_FROM` deve usar um remetente permitido no Resend (dominio verificado ou sandbox permitido).
-- `input.from` enviado pelo servico sobrescreve `RESEND_FROM` quando informado.
-- Cada organizacao pode definir seu remetente (`fromName`/`fromEmail`) em `admin/settings/contact-email`.
+- `RESEND_FROM` deve usar um remetente permitido no Resend (domínio verificado ou sandbox permitido).
+- `input.from` enviado pelo serviço sobrescreve `RESEND_FROM` quando informado.
+- Cada organização pode definir seu remetente (`fromName`/`fromEmail`) em `admin/settings/contact-email`.
 
 ## Run tests
 

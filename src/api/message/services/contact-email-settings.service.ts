@@ -7,6 +7,7 @@ import {
   OrganizationContactEmailSettings,
 } from '../entities/organization-contact-email-settings.entity';
 import { ContactEmailSettingsViewDto, UpdateContactEmailSettingsDto } from '../dto/contact-email-settings.dto';
+import { composeFromHeader, isValidEmailAddress, normalizeEmailAddress } from '../../../shared/email/email-address.util';
 
 interface ContactEmailSettingsValidation {
   valid: boolean;
@@ -89,7 +90,7 @@ export class ContactEmailSettingsService {
       };
     }
 
-    const from = this.composeFromHeader(normalized.fromName, normalized.fromEmail);
+    const from = composeFromHeader(normalized.fromName, normalized.fromEmail);
     const replyTo = this.resolveReplyTo(normalized.replyToMode, normalized.customReplyTo, residentEmail ?? null);
 
     return {
@@ -105,10 +106,10 @@ export class ContactEmailSettingsService {
   async resolveOrganizationSenderFrom(organizationId: string): Promise<string | null> {
     const settings = await this.settingsRepository.findOne({ where: { organizationId } });
     const normalized = this.normalizeSettings(settings);
-    if (!normalized.fromEmail || !this.isValidEmail(normalized.fromEmail)) {
+    if (!normalized.fromEmail || !isValidEmailAddress(normalized.fromEmail)) {
       return null;
     }
-    return this.composeFromHeader(normalized.fromName, normalized.fromEmail);
+    return composeFromHeader(normalized.fromName, normalized.fromEmail);
   }
 
   private sanitizePayload(data: UpdateContactEmailSettingsDto): {
@@ -123,9 +124,9 @@ export class ContactEmailSettingsService {
       deliveryMode: data.deliveryMode,
       recipientEmails: (data.recipientEmails || []).map((value) => value.trim().toLowerCase()).filter(Boolean),
       fromName: data.fromName?.trim() || null,
-      fromEmail: data.fromEmail?.trim().toLowerCase() || null,
+      fromEmail: normalizeEmailAddress(data.fromEmail),
       replyToMode: data.replyToMode,
-      customReplyTo: data.customReplyTo?.trim().toLowerCase() || null,
+      customReplyTo: normalizeEmailAddress(data.customReplyTo),
     };
   }
 
@@ -152,9 +153,9 @@ export class ContactEmailSettingsService {
       deliveryMode: settings.deliveryMode,
       recipientEmails: (settings.recipientEmails || []).map((value) => value.trim().toLowerCase()).filter(Boolean),
       fromName: settings.fromName?.trim() || null,
-      fromEmail: settings.fromEmail?.trim().toLowerCase() || null,
+      fromEmail: normalizeEmailAddress(settings.fromEmail),
       replyToMode: settings.replyToMode,
-      customReplyTo: settings.customReplyTo?.trim().toLowerCase() || null,
+      customReplyTo: normalizeEmailAddress(settings.customReplyTo),
     };
   }
 
@@ -173,18 +174,18 @@ export class ContactEmailSettingsService {
         errors.push('At least one recipient email is required when email delivery is enabled');
       }
 
-      if (settings.recipientEmails.some((email) => !this.isValidEmail(email))) {
+      if (settings.recipientEmails.some((email) => !isValidEmailAddress(email))) {
         errors.push('recipientEmails contains invalid email');
       }
 
-      if (settings.fromEmail && !this.isValidEmail(settings.fromEmail)) {
+      if (settings.fromEmail && !isValidEmailAddress(settings.fromEmail)) {
         errors.push('fromEmail is invalid');
       }
 
       if (settings.replyToMode === 'custom') {
         if (!settings.customReplyTo) {
           errors.push('customReplyTo is required when replyToMode is custom');
-        } else if (!this.isValidEmail(settings.customReplyTo)) {
+        } else if (!isValidEmailAddress(settings.customReplyTo)) {
           errors.push('customReplyTo is invalid');
         }
       }
@@ -231,19 +232,4 @@ export class ContactEmailSettingsService {
     return residentEmail?.trim() || null;
   }
 
-  private composeFromHeader(fromName: string | null, fromEmail: string | null): string | null {
-    if (!fromEmail) {
-      return null;
-    }
-
-    if (!fromName) {
-      return fromEmail;
-    }
-
-    return `${fromName} <${fromEmail}>`;
-  }
-
-  private isValidEmail(value: string): boolean {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-  }
 }

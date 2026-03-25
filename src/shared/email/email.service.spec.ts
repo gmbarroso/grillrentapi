@@ -42,7 +42,7 @@ describe('EmailService', () => {
     });
   });
 
-  it('sends through resend when EMAIL_PROVIDER is resend', async () => {
+  it('sends through Resend when configured', async () => {
     configValues.RESEND_API_KEY = 're_test';
     configValues.RESEND_FROM = 'GrillRent <hello@example.com>';
     mockResendSend.mockResolvedValue({ data: { id: 'email_123' }, error: null });
@@ -88,11 +88,30 @@ describe('EmailService', () => {
       attachments: [
         {
           filename: 'test.txt',
-          content: 'YWJj',
+          content: Buffer.from('abc'),
           contentType: 'text/plain',
         },
       ],
     });
+  });
+
+  it('reuses resend client for repeated sends with same key', async () => {
+    configValues.RESEND_API_KEY = 're_test';
+    configValues.RESEND_FROM = 'GrillRent <hello@example.com>';
+    mockResendSend.mockResolvedValue({ data: { id: 'email_123' }, error: null });
+
+    await service.send({
+      to: ['admin@example.com'],
+      subject: 'A',
+      text: 'A',
+    });
+    await service.send({
+      to: ['admin@example.com'],
+      subject: 'B',
+      text: 'B',
+    });
+
+    expect(Resend).toHaveBeenCalledTimes(1);
   });
 
   it('skips resend when api key is missing', async () => {

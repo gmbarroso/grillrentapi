@@ -27,6 +27,7 @@ import { ForgotPasswordConfirmDto, ForgotPasswordRequestDto } from '../dto/forgo
 import { EmailService, type SendEmailResult } from '../../../shared/email/email.service';
 import { Organization } from '../../organization/entities/organization.entity';
 import { OrganizationContactEmailSettings } from '../../message/entities/organization-contact-email-settings.entity';
+import { composeFromHeader, isValidEmailAddress, normalizeEmailAddress } from '../../../shared/email/email-address.util';
 
 @Injectable()
 export class UserService {
@@ -512,16 +513,12 @@ export class UserService {
       return null;
     }
 
-    const fromEmail = settings.fromEmail.trim().toLowerCase();
-    if (!this.isValidEmail(fromEmail)) {
+    const fromEmail = normalizeEmailAddress(settings.fromEmail);
+    if (!fromEmail || !isValidEmailAddress(fromEmail)) {
       return null;
     }
 
-    const fromName = settings.fromName?.trim() || null;
-    if (!fromName) {
-      return fromEmail;
-    }
-    return `${fromName} <${fromEmail}>`;
+    return composeFromHeader(settings.fromName || null, fromEmail);
   }
 
   private isProductionLike(): boolean {
@@ -551,7 +548,4 @@ export class UserService {
     });
   }
 
-  private isValidEmail(value: string): boolean {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-  }
 }

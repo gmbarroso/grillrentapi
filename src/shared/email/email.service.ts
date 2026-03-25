@@ -33,6 +33,8 @@ export interface SendEmailResult {
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
+  private resendClient: Resend | null = null;
+  private resendClientKey: string | null = null;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -72,7 +74,7 @@ export class EmailService {
     const headers = this.buildProviderHeaders(input);
 
     try {
-      const client = new Resend(apiKey);
+      const client = this.getResendClient(apiKey);
       const { data, error } = await client.emails.send({
         from,
         to: input.to,
@@ -82,7 +84,9 @@ export class EmailService {
         replyTo: input.replyTo,
         attachments: input.attachments?.map((attachment) => ({
           filename: attachment.filename,
-          content: attachment.content,
+          content: attachment.encoding === 'base64'
+            ? Buffer.from(attachment.content, 'base64')
+            : attachment.content,
           contentType: attachment.contentType,
         })),
         headers: Object.keys(headers).length ? headers : undefined,
@@ -126,6 +130,16 @@ export class EmailService {
       headers.References = input.references.trim();
     }
     return headers;
+  }
+
+  private getResendClient(apiKey: string): Resend {
+    if (this.resendClient && this.resendClientKey === apiKey) {
+      return this.resendClient;
+    }
+
+    this.resendClient = new Resend(apiKey);
+    this.resendClientKey = apiKey;
+    return this.resendClient;
   }
 
 }
