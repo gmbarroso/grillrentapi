@@ -170,8 +170,11 @@ export class UserService {
       this.logger.warn(`User not found: ${userId}`);
       throw new NotFoundException('User not found');
     }
-    await this.bookingRepository.delete({ userId, organizationId });
-    await this.userRepository.remove(user);
+
+    await this.userRepository.manager.transaction(async (transactionalEntityManager) => {
+      await transactionalEntityManager.delete(Booking, { userId, organizationId });
+      await transactionalEntityManager.remove(user);
+    });
     this.logger.log(`User removed successfully: ${userId}`);
     return { message: 'User removed successfully' };
   }
