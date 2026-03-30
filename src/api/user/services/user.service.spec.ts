@@ -406,6 +406,9 @@ describe('UserService', () => {
     expect(userRepository.remove).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'user-1', organizationId: 'org-1' }),
     );
+    const deleteCallOrder = (bookingRepository.delete as jest.Mock).mock.invocationCallOrder[0];
+    const removeCallOrder = (userRepository.remove as jest.Mock).mock.invocationCallOrder[0];
+    expect(deleteCallOrder).toBeLessThan(removeCallOrder);
     expect(result).toEqual({ message: 'User removed successfully' });
   });
 
