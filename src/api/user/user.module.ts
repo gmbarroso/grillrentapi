@@ -13,10 +13,11 @@ import { JwtAuthGuard } from '../../shared/auth/guards/jwt-auth.guard';
 import { Organization } from '../organization/entities/organization.entity';
 import { OrganizationContactEmailSettings } from '../message/entities/organization-contact-email-settings.entity';
 import { EmailModule } from '../../shared/email/email.module';
+import { Booking } from '../booking/entities/booking.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, RevokedToken, Organization, OrganizationContactEmailSettings]),
+    TypeOrmModule.forFeature([User, Booking, RevokedToken, Organization, OrganizationContactEmailSettings]),
     PassportModule,
     EmailModule,
     JwtModule.registerAsync({
