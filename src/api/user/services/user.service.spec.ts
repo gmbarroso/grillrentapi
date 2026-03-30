@@ -9,10 +9,12 @@ import { Organization } from '../../organization/entities/organization.entity';
 import { OrganizationContactEmailSettings } from '../../message/entities/organization-contact-email-settings.entity';
 import { EmailService } from '../../../shared/email/email.service';
 import { ConfigService } from '@nestjs/config';
+import { Booking } from '../../booking/entities/booking.entity';
 
 describe('UserService', () => {
   let service: UserService;
   let userRepository: jest.Mocked<Repository<User>>;
+  let bookingRepository: jest.Mocked<Repository<Booking>>;
   let organizationRepository: jest.Mocked<Repository<Organization>>;
   let organizationContactEmailSettingsRepository: jest.Mocked<Repository<OrganizationContactEmailSettings>>;
   let emailService: jest.Mocked<EmailService>;
@@ -28,6 +30,13 @@ describe('UserService', () => {
             findOne: jest.fn(),
             save: jest.fn(),
             createQueryBuilder: jest.fn(),
+            remove: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(Booking),
+          useValue: {
+            delete: jest.fn(),
           },
         },
         {
@@ -64,6 +73,7 @@ describe('UserService', () => {
 
     service = module.get(UserService);
     userRepository = module.get(getRepositoryToken(User));
+    bookingRepository = module.get(getRepositoryToken(Booking));
     organizationRepository = module.get(getRepositoryToken(Organization));
     organizationContactEmailSettingsRepository = module.get(getRepositoryToken(OrganizationContactEmailSettings));
     emailService = module.get(EmailService);
@@ -380,5 +390,30 @@ describe('UserService', () => {
       message: 'First access tour reset successfully',
       tour: { firstAccessTourVersionCompleted: null },
     });
+  });
+
+  it('deletes user bookings before deleting user', async () => {
+    userRepository.findOne.mockResolvedValue({
+      id: 'user-1',
+      organizationId: 'org-1',
+      role: UserRole.RESIDENT,
+    } as User);
+    userRepository.remove.mockResolvedValue({ id: 'user-1' } as User);
+
+    const result = await service.remove('user-1', 'org-1');
+
+    expect(bookingRepository.delete).toHaveBeenCalledWith({ userId: 'user-1', organizationId: 'org-1' });
+    expect(userRepository.remove).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1', organizationId: 'org-1' }),
+    );
+    expect(result).toEqual({ message: 'User removed successfully' });
+  });
+
+  it('throws not found when deleting a missing user', async () => {
+    userRepository.findOne.mockResolvedValue(null);
+
+    await expect(service.remove('missing-user', 'org-1')).rejects.toThrow('User not found');
+    expect(bookingRepository.delete).not.toHaveBeenCalled();
+    expect(userRepository.remove).not.toHaveBeenCalled();
   });
 });

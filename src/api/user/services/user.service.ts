@@ -28,6 +28,7 @@ import { EmailService, type SendEmailResult } from '../../../shared/email/email.
 import { Organization } from '../../organization/entities/organization.entity';
 import { OrganizationContactEmailSettings } from '../../message/entities/organization-contact-email-settings.entity';
 import { composeFromHeader, isValidEmailAddress, normalizeEmailAddress } from '../../../shared/email/email-address.util';
+import { Booking } from '../../booking/entities/booking.entity';
 
 @Injectable()
 export class UserService {
@@ -38,6 +39,8 @@ export class UserService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Booking)
+    private readonly bookingRepository: Repository<Booking>,
     @InjectRepository(Organization)
     private readonly organizationRepository: Repository<Organization>,
     @InjectRepository(OrganizationContactEmailSettings)
@@ -167,6 +170,7 @@ export class UserService {
       this.logger.warn(`User not found: ${userId}`);
       throw new NotFoundException('User not found');
     }
+    await this.bookingRepository.delete({ userId, organizationId });
     await this.userRepository.remove(user);
     this.logger.log(`User removed successfully: ${userId}`);
     return { message: 'User removed successfully' };
