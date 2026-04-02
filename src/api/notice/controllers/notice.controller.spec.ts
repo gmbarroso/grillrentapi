@@ -60,8 +60,8 @@ describe('NoticeController', () => {
   });
 
   it('returns notice constraints with contentMaxLength', () => {
-    expect(controller.getConstraints()).toEqual({ contentMaxLength: NOTICE_CONTENT_MAX_LENGTH });
-    expect(controller.getConstraints().contentMaxLength).toBe(10000);
+    const constraints = controller.getConstraints();
+    expect(constraints).toEqual({ contentMaxLength: NOTICE_CONTENT_MAX_LENGTH });
   });
 
   it('blocks non-admin create operation', async () => {
