@@ -4,6 +4,7 @@ import { NoticeService } from '../services/notice.service';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { UserRole } from '../../user/entities/user.entity';
 import { ForbiddenException } from '@nestjs/common';
+import { NOTICE_CONTENT_MAX_LENGTH } from '../constants/notice.constants';
 
 describe('NoticeController', () => {
   let controller: NoticeController;
@@ -56,6 +57,11 @@ describe('NoticeController', () => {
       previousLastSeenNoticesAt: null,
     });
     expect(service.markAllAsSeen).toHaveBeenCalledWith('user-1', 'org-1');
+  });
+
+  it('returns notice constraints with contentMaxLength', () => {
+    expect(controller.getConstraints()).toEqual({ contentMaxLength: NOTICE_CONTENT_MAX_LENGTH });
+    expect(controller.getConstraints().contentMaxLength).toBe(10000);
   });
 
   it('blocks non-admin create operation', async () => {
