@@ -7,6 +7,7 @@ import { Request } from 'express';
 import { JoiValidationPipe } from '../../../shared/pipes/joi-validation.pipe';
 import { CreateNoticeDto, CreateNoticeSchema } from '../dto/create-notice.dto';
 import { UpdateNoticeDto, UpdateNoticeSchema } from '../dto/update-notice.dto';
+import { NOTICE_CONTENT_MAX_LENGTH } from '../constants/notice.constants';
 
 interface AuthenticatedRequest extends Request {
   user: { id: string; role: string; organizationId: string };
@@ -37,6 +38,14 @@ export class NoticeController {
     @Query('limit') limit: number = 10,
   ): Promise<{ data: Notice[]; total: number }> {
     return this.noticeService.findAll(req.user.organizationId, page, limit);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('constraints')
+  getConstraints(): { contentMaxLength: number } {
+    return {
+      contentMaxLength: NOTICE_CONTENT_MAX_LENGTH,
+    };
   }
 
   @UseGuards(JwtAuthGuard)
