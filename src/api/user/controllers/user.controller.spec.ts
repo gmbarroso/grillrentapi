@@ -145,7 +145,7 @@ describe('UserController', () => {
   });
 
   describe('getAllUsers', () => {
-    it('should get all users', async () => {
+    it('should get all users with default (undefined) query params', async () => {
       const users: User[] = [{
         id: '1',
         name: 'testuser',
@@ -155,7 +155,7 @@ describe('UserController', () => {
         block: 1,
         role: UserRole.RESIDENT,
       }];
-      const result = { message: 'All users retrieved successfully', users };
+      const result = { data: users.map(u => ({ ...u })), total: 1, page: 1, lastPage: 1 };
       jest.spyOn(service, 'getAllUsers').mockResolvedValue(result as any);
 
       expect(
@@ -176,6 +176,40 @@ describe('UserController', () => {
         sort: undefined,
         order: undefined,
         role: undefined,
+      });
+    });
+
+    it('should forward concrete query params to the service', async () => {
+      const users: User[] = [{
+        id: '2',
+        name: 'adminuser',
+        password: 'hashedpassword',
+        email: 'admin@example.com',
+        apartment: '202',
+        block: 2,
+        role: UserRole.ADMIN,
+      }];
+      const result = { data: users.map(u => ({ ...u })), total: 1, page: 2, lastPage: 3 };
+      jest.spyOn(service, 'getAllUsers').mockResolvedValue(result as any);
+
+      expect(
+        await controller.getAllUsers(
+          { organizationId: 'org-1' } as any,
+          'admin',
+          '2',
+          '5',
+          'name',
+          'ASC',
+          UserRole.ADMIN,
+        ),
+      ).toBe(result);
+      expect(service.getAllUsers).toHaveBeenCalledWith('org-1', {
+        q: 'admin',
+        page: '2',
+        limit: '5',
+        sort: 'name',
+        order: 'ASC',
+        role: UserRole.ADMIN,
       });
     });
   });

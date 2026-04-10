@@ -9,6 +9,7 @@ describe('BookingService date-range filtering', () => {
     skip: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
+    addOrderBy: jest.fn().mockReturnThis(),
     getManyAndCount: jest.fn(),
   };
 

@@ -218,7 +218,8 @@ export class UserService {
         `CASE WHEN user.email IS NOT NULL AND user.emailVerifiedAt IS NOT NULL THEN 0 ELSE 1 END`,
         'ASC',
       )
-      .addOrderBy(sort, order);
+      .addOrderBy(sort, order)
+      .addOrderBy('user.id', 'ASC');
 
     const [users, total] = await queryBuilder.getManyAndCount();
     const lastPage = Math.max(1, Math.ceil(total / limit));
