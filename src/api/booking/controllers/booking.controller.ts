@@ -83,9 +83,10 @@ export class BookingController {
     @Query('order') order: 'ASC' | 'DESC' = 'ASC',
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('q') q?: string,
   ) {
     this.logger.log('Fetching all bookings');
-    return this.bookingService.findAll(this.requireOrganizationId(req), page, limit, sort, order, startDate, endDate);
+    return this.bookingService.findAll(this.requireOrganizationId(req), page, limit, sort, order, startDate, endDate, q);
   }
 
   @UseGuards(JwtAuthGuard)

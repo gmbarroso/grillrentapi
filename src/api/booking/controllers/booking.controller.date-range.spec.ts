@@ -7,8 +7,25 @@ describe('BookingController date-range forwarding', () => {
     };
     const controller = new BookingController(bookingService as any);
 
-    await controller.findAll(1, 20, 'startTime', 'ASC', '2026-02-27', '2026-05-27');
+    await controller.findAll(
+      { user: { organizationId: 'org-1' } } as any,
+      1,
+      20,
+      'startTime',
+      'ASC',
+      '2026-02-27',
+      '2026-05-27',
+    );
 
-    expect(bookingService.findAll).toHaveBeenCalledWith(1, 20, 'startTime', 'ASC', '2026-02-27', '2026-05-27');
+    expect(bookingService.findAll).toHaveBeenCalledWith(
+      'org-1',
+      1,
+      20,
+      'startTime',
+      'ASC',
+      '2026-02-27',
+      '2026-05-27',
+      undefined,
+    );
   });
 });

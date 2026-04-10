@@ -87,7 +87,7 @@ describe('BookingController', () => {
     service.findAll.mockResolvedValue(payload);
 
     await expect(controller.findAll({ user: { organizationId: 'org-1' } } as any)).resolves.toEqual(payload);
-    expect(service.findAll).toHaveBeenCalledWith('org-1', 1, 10, 'startTime', 'ASC', undefined, undefined);
+    expect(service.findAll).toHaveBeenCalledWith('org-1', 1, 10, 'startTime', 'ASC', undefined, undefined, undefined);
   });
 
   it('forwards findByUser query params', async () => {

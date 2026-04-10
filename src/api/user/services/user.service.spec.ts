@@ -31,6 +31,9 @@ describe('UserService', () => {
             save: jest.fn(),
             createQueryBuilder: jest.fn(),
             remove: jest.fn(),
+            manager: {
+              transaction: jest.fn(),
+            },
           },
         },
         {
@@ -82,6 +85,64 @@ describe('UserService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('applies resident listing query, pagination and verified-email priority ordering', async () => {
+    const queryBuilder = {
+      where: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([
+        [
+          {
+            id: 'user-1',
+            name: 'Alice',
+            email: 'alice@example.com',
+            emailVerifiedAt: new Date('2026-01-01T10:00:00.000Z'),
+            password: 'hashed',
+            apartment: '101',
+            block: 1,
+            role: UserRole.RESIDENT,
+            organizationId: 'org-1',
+          },
+        ],
+        1,
+      ]),
+    };
+    userRepository.createQueryBuilder.mockReturnValue(queryBuilder as any);
+
+    const result = await service.getAllUsers('org-1', {
+      q: 'alice',
+      page: '2',
+      limit: '20',
+      sort: 'name',
+      order: 'DESC',
+      role: 'resident',
+    });
+
+    expect(queryBuilder.where).toHaveBeenCalledWith('user.organizationId = :organizationId', { organizationId: 'org-1' });
+    expect(queryBuilder.take).toHaveBeenCalledWith(20);
+    expect(queryBuilder.skip).toHaveBeenCalledWith(20);
+    expect(queryBuilder.andWhere).toHaveBeenCalledWith('user.role = :role', { role: 'resident' });
+    expect(queryBuilder.addOrderBy).toHaveBeenCalledWith(
+      expect.stringContaining('user.emailVerifiedAt IS NOT NULL'),
+      'ASC',
+    );
+    expect(queryBuilder.addOrderBy).toHaveBeenCalledWith('user.name', 'DESC');
+    expect(result).toEqual({
+      data: [
+        expect.objectContaining({
+          id: 'user-1',
+          name: 'Alice',
+          email: 'alice@example.com',
+        }),
+      ],
+      total: 1,
+      page: 2,
+      lastPage: 1,
+    });
   });
 
   it('returns generic forgot-password response when organization or email is missing', async () => {
@@ -398,16 +459,22 @@ describe('UserService', () => {
       organizationId: 'org-1',
       role: UserRole.RESIDENT,
     } as User);
-    userRepository.remove.mockResolvedValue({ id: 'user-1' } as User);
+    const transactionalEntityManager = {
+      delete: jest.fn().mockResolvedValue(undefined),
+      remove: jest.fn().mockResolvedValue(undefined),
+    };
+    (userRepository.manager.transaction as jest.Mock).mockImplementation(async (runInTransaction: any) =>
+      runInTransaction(transactionalEntityManager),
+    );
 
     const result = await service.remove('user-1', 'org-1');
 
-    expect(bookingRepository.delete).toHaveBeenCalledWith({ userId: 'user-1', organizationId: 'org-1' });
-    expect(userRepository.remove).toHaveBeenCalledWith(
+    expect(transactionalEntityManager.delete).toHaveBeenCalledWith(Booking, { userId: 'user-1', organizationId: 'org-1' });
+    expect(transactionalEntityManager.remove).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'user-1', organizationId: 'org-1' }),
     );
-    const deleteCallOrder = (bookingRepository.delete as jest.Mock).mock.invocationCallOrder[0];
-    const removeCallOrder = (userRepository.remove as jest.Mock).mock.invocationCallOrder[0];
+    const deleteCallOrder = transactionalEntityManager.delete.mock.invocationCallOrder[0];
+    const removeCallOrder = transactionalEntityManager.remove.mock.invocationCallOrder[0];
     expect(deleteCallOrder).toBeLessThan(removeCallOrder);
     expect(result).toEqual({ message: 'User removed successfully' });
   });
@@ -416,7 +483,6 @@ describe('UserService', () => {
     userRepository.findOne.mockResolvedValue(null);
 
     await expect(service.remove('missing-user', 'org-1')).rejects.toThrow('User not found');
-    expect(bookingRepository.delete).not.toHaveBeenCalled();
-    expect(userRepository.remove).not.toHaveBeenCalled();
+    expect(userRepository.manager.transaction).not.toHaveBeenCalled();
   });
 });

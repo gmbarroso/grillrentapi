@@ -4,6 +4,7 @@ import { BookingService } from './booking.service';
 describe('BookingService date-range filtering', () => {
   const queryBuilder = {
     leftJoinAndSelect: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
     take: jest.fn().mockReturnThis(),
     skip: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
@@ -32,7 +33,7 @@ describe('BookingService date-range filtering', () => {
   });
 
   it('applies startDate and endDate filters to query builder', async () => {
-    await service.findAll(1, 20, 'startTime', 'ASC', '2026-02-27', '2026-05-27');
+    await service.findAll('org-1', 1, 20, 'startTime', 'ASC', '2026-02-27', '2026-05-27');
 
     expect(queryBuilder.andWhere).toHaveBeenCalledWith('booking.startTime >= :startDate', {
       startDate: new Date('2026-02-27T00:00:00.000Z'),
@@ -43,13 +44,13 @@ describe('BookingService date-range filtering', () => {
   });
 
   it('rejects invalid startDate', async () => {
-    await expect(service.findAll(1, 20, 'startTime', 'ASC', 'invalid-date')).rejects.toThrow(
+    await expect(service.findAll('org-1', 1, 20, 'startTime', 'ASC', 'invalid-date')).rejects.toThrow(
       BadRequestException,
     );
   });
 
   it('rejects invalid endDate', async () => {
-    await expect(service.findAll(1, 20, 'startTime', 'ASC', undefined, 'invalid-date')).rejects.toThrow(
+    await expect(service.findAll('org-1', 1, 20, 'startTime', 'ASC', undefined, 'invalid-date')).rejects.toThrow(
       BadRequestException,
     );
   });

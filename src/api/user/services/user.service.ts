@@ -35,6 +35,17 @@ export class UserService {
   private readonly logger = new Logger(UserService.name);
   private static readonly EMAIL_VERIFICATION_TTL_MS = 1000 * 60 * 30;
   private static readonly PASSWORD_RESET_TTL_MS = 1000 * 60 * 30;
+  private static readonly DEFAULT_PAGE = 1;
+  private static readonly DEFAULT_LIMIT = 10;
+  private static readonly MAX_LIMIT = 100;
+  private static readonly ALLOWED_USER_SORTS = new Map<string, string>([
+    ['name', 'user.name'],
+    ['email', 'user.email'],
+    ['apartment', 'user.apartment'],
+    ['block', 'user.block'],
+    ['role', 'user.role'],
+    ['emailVerifiedAt', 'user.emailVerifiedAt'],
+  ]);
 
   constructor(
     @InjectRepository(User)
@@ -157,10 +168,67 @@ export class UserService {
     };
   }
 
-  async getAllUsers(organizationId: string) {
-    this.logger.log('Fetching all users');
-    const users = await this.userRepository.find({ where: { organizationId } });
-    return { message: 'All users retrieved successfully', users: users.map((user) => this.toSafeUser(user)) };
+  async getAllUsers(
+    organizationId: string,
+    options?: {
+      q?: string;
+      page?: string;
+      limit?: string;
+      sort?: string;
+      order?: string;
+      role?: string;
+    },
+  ) {
+    this.logger.log('Fetching users with server-side pagination and query filtering');
+
+    const page = this.normalizePage(options?.page);
+    const limit = this.normalizeLimit(options?.limit);
+    const sort = this.normalizeSort(options?.sort);
+    const order = this.normalizeOrder(options?.order);
+    const q = options?.q?.trim();
+    const role = this.normalizeRole(options?.role);
+
+    const queryBuilder = this.userRepository
+      .createQueryBuilder('user')
+      .where('user.organizationId = :organizationId', { organizationId })
+      .take(limit)
+      .skip((page - 1) * limit);
+
+    if (role) {
+      queryBuilder.andWhere('user.role = :role', { role });
+    }
+
+    if (q) {
+      const normalizedQuery = `%${q.toLowerCase()}%`;
+      queryBuilder.andWhere(
+        `(
+          LOWER(user.name) LIKE :q
+          OR LOWER(COALESCE(user.email, '')) LIKE :q
+          OR LOWER(user.apartment) LIKE :q
+          OR CAST(user.block AS TEXT) LIKE :q
+          OR LOWER(CONCAT(user.apartment, ' bl. ', user.block)) LIKE :q
+        )`,
+        { q: normalizedQuery },
+      );
+    }
+
+    // Prioritize users with verified email first, then apply requested deterministic sorting.
+    queryBuilder
+      .addOrderBy(
+        `CASE WHEN user.email IS NOT NULL AND user.emailVerifiedAt IS NOT NULL THEN 0 ELSE 1 END`,
+        'ASC',
+      )
+      .addOrderBy(sort, order);
+
+    const [users, total] = await queryBuilder.getManyAndCount();
+    const lastPage = Math.max(1, Math.ceil(total / limit));
+
+    return {
+      data: users.map((user) => this.toSafeUser(user)),
+      total,
+      page,
+      lastPage,
+    };
   }
 
   async remove(userId: string, organizationId: string) {
@@ -531,6 +599,50 @@ export class UserService {
   private isProductionLike(): boolean {
     const env = (this.configService.get<string>('NODE_ENV') || '').toLowerCase();
     return env === 'production' || env === 'staging';
+  }
+
+  private normalizePage(page?: string): number {
+    const parsed = Number.parseInt(page || '', 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      return UserService.DEFAULT_PAGE;
+    }
+    return parsed;
+  }
+
+  private normalizeLimit(limit?: string): number {
+    const parsed = Number.parseInt(limit || '', 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      return UserService.DEFAULT_LIMIT;
+    }
+    return Math.min(parsed, UserService.MAX_LIMIT);
+  }
+
+  private normalizeSort(sort?: string): string {
+    if (!sort) {
+      return UserService.ALLOWED_USER_SORTS.get('name') as string;
+    }
+    const mappedSort = UserService.ALLOWED_USER_SORTS.get(sort);
+    if (!mappedSort) {
+      throw new BadRequestException(`Invalid sort column: ${sort}`);
+    }
+    return mappedSort;
+  }
+
+  private normalizeOrder(order?: string): 'ASC' | 'DESC' {
+    if (!order) return 'ASC';
+    const normalizedOrder = order.toUpperCase();
+    if (normalizedOrder !== 'ASC' && normalizedOrder !== 'DESC') {
+      throw new BadRequestException(`Invalid order: ${order}`);
+    }
+    return normalizedOrder;
+  }
+
+  private normalizeRole(role?: string): UserRole | undefined {
+    if (!role) return undefined;
+    if (role !== UserRole.ADMIN && role !== UserRole.RESIDENT) {
+      throw new BadRequestException(`Invalid role filter: ${role}`);
+    }
+    return role;
   }
 
   private async sendOnboardingVerificationEmail(

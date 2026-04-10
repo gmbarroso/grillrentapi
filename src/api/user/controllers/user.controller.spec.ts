@@ -158,7 +158,25 @@ describe('UserController', () => {
       const result = { message: 'All users retrieved successfully', users };
       jest.spyOn(service, 'getAllUsers').mockResolvedValue(result as any);
 
-      expect(await controller.getAllUsers({ organizationId: 'org-1' } as any)).toBe(result);
+      expect(
+        await controller.getAllUsers(
+          { organizationId: 'org-1' } as any,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        ),
+      ).toBe(result);
+      expect(service.getAllUsers).toHaveBeenCalledWith('org-1', {
+        q: undefined,
+        page: undefined,
+        limit: undefined,
+        sort: undefined,
+        order: undefined,
+        role: undefined,
+      });
     });
   });
 
