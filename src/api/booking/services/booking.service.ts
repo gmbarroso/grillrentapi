@@ -424,7 +424,7 @@ export class BookingService {
 
     queryBuilder.orderBy(mappedSortColumn, normalizedOrder);
     if (mappedSortColumn !== 'booking.id') {
-      queryBuilder.addOrderBy('booking.id', normalizedOrder);
+      queryBuilder.addOrderBy('booking.id', 'ASC');
     }
 
     const [bookings, total] = await queryBuilder.getManyAndCount();
