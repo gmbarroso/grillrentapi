@@ -106,6 +106,98 @@ describe('WhatsappSettingsService onboarding', () => {
     expect(result.maskedWhatsappNumber).toBe('••••0000');
   });
 
+  it('falls back to /instance/qr/... when /instance/connect/... returns 404', async () => {
+    integrationRepository.findOne.mockResolvedValue({
+      id: 'integration-1',
+      organizationId: 'org-1',
+      provider: 'evolution',
+      baseUrl: 'https://evolution.example.com',
+      instanceName: 'grillrent-test',
+      apiKey: 'provider-api-key',
+      status: 'disconnected',
+      autoSendNotices: true,
+      whatsappNumber: null,
+    });
+
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ instance: { state: 'close' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        text: async () => 'Not Found',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ base64: 'QR_FALLBACK', expiresIn: 30 }),
+      });
+    (global as any).fetch = fetchMock;
+
+    const result = await service.getOnboardingStatus('org-1');
+
+    expect(result.state).toBe('qr_ready');
+    expect(result.qrCodeBase64).toBe('QR_FALLBACK');
+    expect(result.ttlSeconds).toBe(30);
+  });
+
+  it('throws BadGatewayException when provider instance creation returns non-2xx', async () => {
+    organizationRepository.findOne.mockResolvedValue({ id: 'org-1', slug: 'Test Org' });
+    integrationRepository.findOne.mockResolvedValueOnce(null);
+
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () => '[]',
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        text: async () => 'Not Found',
+      });
+    (global as any).fetch = fetchMock;
+
+    await expect(service.startOnboarding('org-1')).rejects.toThrow('Unable to create WhatsApp provider instance');
+  });
+
+  it('throws BadGatewayException when QR fetch returns non-2xx error', async () => {
+    integrationRepository.findOne.mockResolvedValue({
+      id: 'integration-1',
+      organizationId: 'org-1',
+      provider: 'evolution',
+      baseUrl: 'https://evolution.example.com',
+      instanceName: 'grillrent-test',
+      apiKey: 'provider-api-key',
+      status: 'disconnected',
+      autoSendNotices: true,
+      whatsappNumber: null,
+    });
+
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ instance: { state: 'close' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: async () => 'Internal Server Error',
+      });
+    (global as any).fetch = fetchMock;
+
+    await expect(service.getOnboardingStatus('org-1')).rejects.toThrow(
+      'Unable to fetch WhatsApp QR code from provider',
+    );
+  });
+
   it('disconnects onboarding and clears persisted bindings', async () => {
     integrationRepository.findOne.mockResolvedValue({
       id: 'integration-1',

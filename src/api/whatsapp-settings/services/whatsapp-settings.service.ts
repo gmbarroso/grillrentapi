@@ -439,7 +439,7 @@ export class WhatsappSettingsService {
       return;
     }
 
-    await this.callProviderWithFallback(
+    const createResponse = await this.callProviderWithFallback(
       ['/instance/create'],
       integration.baseUrl,
       {
@@ -454,8 +454,13 @@ export class WhatsappSettingsService {
           integration: 'WHATSAPP-BAILEYS',
         }),
       },
-      { allow404: true },
     );
+
+    if (!createResponse || !createResponse.ok) {
+      throw new BadGatewayException(
+        `Unable to create WhatsApp provider instance (status ${createResponse?.status ?? 'unknown'})`,
+      );
+    }
   }
 
   private async providerInstanceExists(integration: OrganizationWhatsappIntegration): Promise<boolean> {
@@ -586,7 +591,7 @@ export class WhatsappSettingsService {
           apikey: integration.apiKey,
         },
       },
-      { allow404: false },
+      { allow404: true },
     );
 
     if (!response) {
@@ -594,6 +599,10 @@ export class WhatsappSettingsService {
         qrCodeBase64: null,
         ttlSeconds: WhatsappSettingsService.DEFAULT_QR_TTL_SECONDS,
       };
+    }
+
+    if (!response.ok) {
+      throw new BadGatewayException(`Unable to fetch WhatsApp QR code from provider (status ${response.status})`);
     }
 
     const payload = (await this.readJsonSafe<EvolutionConnectPayload>(response)) ?? {};
