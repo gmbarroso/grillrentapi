@@ -256,6 +256,7 @@ describe('BookingService', () => {
         skip: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
+        addOrderBy: jest.fn().mockReturnThis(),
         getManyAndCount: jest.fn().mockResolvedValue([bookings, 1]),
       };
 

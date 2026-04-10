@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Post, Body, Logger, Get, Put, Delete, Param, Req, UseGuards, ForbiddenException, UnauthorizedException, GoneException } from '@nestjs/common';
+import { BadRequestException, Controller, Post, Body, Logger, Get, Put, Delete, Param, Req, UseGuards, ForbiddenException, UnauthorizedException, GoneException, Query } from '@nestjs/common';
 import { UpdateUserDto, UpdateUserSchema } from '../dto/update-user.dto';
 import { UserService } from '../services/user.service';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
@@ -88,9 +88,24 @@ export class UserController {
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  async getAllUsers(@User() user: UserEntity) {
+  async getAllUsers(
+    @User() user: UserEntity,
+    @Query('q') q?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('sort') sort?: string,
+    @Query('order') order?: string,
+    @Query('role') role?: string,
+  ) {
     this.logger.log('Fetching all users');
-    return this.userService.getAllUsers(user.organizationId as string);
+    return this.userService.getAllUsers(user.organizationId as string, {
+      q,
+      page,
+      limit,
+      sort,
+      order,
+      role,
+    });
   }
 
   @UseGuards(JwtAuthGuard)

@@ -19,6 +19,15 @@ export class BookingService {
   private readonly logger = new Logger(BookingService.name);
   private static readonly SAO_PAULO_UTC_OFFSET_HOURS = 3;
   private static readonly MAX_BATCH_SLOTS = 50;
+  private static readonly DEFAULT_PAGE = 1;
+  private static readonly DEFAULT_LIMIT = 10;
+  private static readonly MAX_LIMIT = 100;
+  private static readonly ALLOWED_SORT_COLUMNS = new Map<string, string>([
+    ['startTime', 'booking.startTime'],
+    ['endTime', 'booking.endTime'],
+    ['resourceType', 'resource.type'],
+    ['userApartment', 'user.apartment'],
+  ]);
 
   constructor(
     @InjectRepository(Booking)
@@ -366,20 +375,22 @@ export class BookingService {
     order: 'ASC' | 'DESC' = 'ASC',
     startDate?: string,
     endDate?: string,
+    q?: string,
   ) {
     this.logger.log('Fetching all bookings with pagination and sorting');
 
-    const validSortColumns = ['startTime', 'endTime', 'resourceType', 'userApartment'];
-    if (!validSortColumns.includes(sort)) {
-      throw new BadRequestException(`Invalid sort column: ${sort}`);
-    }
+    const parsedPage = this.normalizePage(page);
+    const parsedLimit = this.normalizeLimit(limit);
+    const mappedSortColumn = this.normalizeSortColumn(sort);
+    const normalizedOrder = this.normalizeOrder(order);
+    const normalizedQuery = q?.trim().toLowerCase();
 
     const queryBuilder = this.bookingRepository.createQueryBuilder('booking')
       .leftJoinAndSelect('booking.resource', 'resource')
       .leftJoinAndSelect('booking.user', 'user')
       .where('booking.organizationId = :organizationId', { organizationId })
-      .take(limit)
-      .skip((page - 1) * limit);
+      .take(parsedLimit)
+      .skip((parsedPage - 1) * parsedLimit);
 
     if (startDate) {
       const startDateTime = new Date(`${startDate}T00:00:00.000Z`);
@@ -397,12 +408,23 @@ export class BookingService {
       queryBuilder.andWhere('booking.startTime <= :endDate', { endDate: endDateTime });
     }
 
-    if (sort === 'resourceType') {
-      queryBuilder.orderBy('resource.type', order);
-    } else if (sort === 'userApartment') {
-      queryBuilder.orderBy('user.apartment', order);
-    } else {
-      queryBuilder.orderBy(`booking.${sort}`, order);
+    if (normalizedQuery) {
+      queryBuilder.andWhere(
+        `(
+          LOWER(COALESCE(resource.name, '')) LIKE :q
+          OR LOWER(COALESCE(resource.type, '')) LIKE :q
+          OR LOWER(COALESCE(user.apartment, '')) LIKE :q
+          OR CAST(user.block AS TEXT) LIKE :q
+          OR LOWER(CONCAT(user.apartment, ' bl. ', user.block)) LIKE :q
+          OR LOWER(COALESCE(booking.bookedOnBehalf, '')) LIKE :q
+        )`,
+        { q: `%${normalizedQuery}%` },
+      );
+    }
+
+    queryBuilder.orderBy(mappedSortColumn, normalizedOrder);
+    if (mappedSortColumn !== 'booking.id') {
+      queryBuilder.addOrderBy('booking.id', 'ASC');
     }
 
     const [bookings, total] = await queryBuilder.getManyAndCount();
@@ -422,8 +444,8 @@ export class BookingService {
         needTablesAndChairs: booking.needTablesAndChairs,
       })),
       total,
-      page,
-      lastPage: Math.ceil(total / limit),
+      page: parsedPage,
+      lastPage: Math.max(1, Math.ceil(total / parsedLimit)),
     };
   }
 
@@ -533,6 +555,38 @@ export class BookingService {
     endOfLocalDayUtcExclusive.setUTCDate(endOfLocalDayUtcExclusive.getUTCDate() + 1);
 
     return [startOfLocalDayUtc, endOfLocalDayUtcExclusive];
+  }
+
+  private normalizePage(page: number): number {
+    const parsed = Number.parseInt(String(page), 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      return BookingService.DEFAULT_PAGE;
+    }
+    return parsed;
+  }
+
+  private normalizeLimit(limit: number): number {
+    const parsed = Number.parseInt(String(limit), 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      return BookingService.DEFAULT_LIMIT;
+    }
+    return Math.min(parsed, BookingService.MAX_LIMIT);
+  }
+
+  private normalizeSortColumn(sort: string): string {
+    const mappedSort = BookingService.ALLOWED_SORT_COLUMNS.get(sort);
+    if (!mappedSort) {
+      throw new BadRequestException(`Invalid sort column: ${sort}`);
+    }
+    return mappedSort;
+  }
+
+  private normalizeOrder(order: 'ASC' | 'DESC' | string): 'ASC' | 'DESC' {
+    const normalizedOrder = String(order).toUpperCase();
+    if (normalizedOrder !== 'ASC' && normalizedOrder !== 'DESC') {
+      throw new BadRequestException(`Invalid order: ${order}`);
+    }
+    return normalizedOrder;
   }
 
   private getSaoPauloUtcDayRangeForInstant(dateTime: Date): [Date, Date] {
