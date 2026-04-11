@@ -19,6 +19,10 @@ export const UpsertWhatsappGroupBindingSchema = Joi.object({
   groupName: Joi.string().trim().max(180).allow('', null).optional(),
 });
 
+export const OnboardingStatusQuerySchema = Joi.object({
+  forceQr: Joi.boolean().optional(),
+});
+
 export class UpdateWhatsappSettingsDto {
   baseUrl!: string;
   instanceName!: string;
@@ -36,6 +40,28 @@ export class TestWhatsappConnectionDto {
 export class UpsertWhatsappGroupBindingDto {
   groupJid!: string;
   groupName?: string | null;
+}
+
+export class OnboardingStatusQueryDto {
+  forceQr?: boolean;
+}
+
+export type WhatsappOnboardingState =
+  | 'creating_instance'
+  | 'qr_ready'
+  | 'connecting'
+  | 'group_selection'
+  | 'active'
+  | 'failed';
+
+export interface WhatsappOnboardingStatusDto {
+  state: WhatsappOnboardingState;
+  status: 'connected' | 'disconnected';
+  instanceName: string;
+  qrCodeBase64: string | null;
+  ttlSeconds: number | null;
+  statusEndpoint: string;
+  maskedWhatsappNumber: string | null;
 }
 
 export interface WhatsappGroupOptionDto {

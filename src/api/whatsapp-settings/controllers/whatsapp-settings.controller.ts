@@ -1,9 +1,11 @@
-import { Body, Controller, ForbiddenException, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../../../shared/auth/guards/jwt-auth.guard';
 import { UserRole } from '../../user/entities/user.entity';
 import { JoiValidationPipe } from '../../../shared/pipes/joi-validation.pipe';
 import {
+  OnboardingStatusQueryDto,
+  OnboardingStatusQuerySchema,
   TestWhatsappConnectionDto,
   TestWhatsappConnectionSchema,
   UpdateWhatsappSettingsDto,
@@ -53,6 +55,37 @@ export class WhatsappSettingsController {
   ) {
     this.ensureAdmin(req);
     return this.whatsappSettingsService.testConnection(req.user.organizationId, data);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('onboarding/start')
+  async startOnboarding(@Req() req: AuthenticatedRequest) {
+    this.ensureAdmin(req);
+    return this.whatsappSettingsService.startOnboarding(req.user.organizationId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('onboarding/status')
+  async getOnboardingStatus(
+    @Req() req: AuthenticatedRequest,
+    @Query(new JoiValidationPipe(OnboardingStatusQuerySchema)) query: OnboardingStatusQueryDto,
+  ) {
+    this.ensureAdmin(req);
+    return this.whatsappSettingsService.getOnboardingStatus(req.user.organizationId, query);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('onboarding/refresh-qr')
+  async refreshOnboardingQr(@Req() req: AuthenticatedRequest) {
+    this.ensureAdmin(req);
+    return this.whatsappSettingsService.refreshOnboardingQr(req.user.organizationId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('onboarding/disconnect')
+  async disconnectOnboarding(@Req() req: AuthenticatedRequest) {
+    this.ensureAdmin(req);
+    return this.whatsappSettingsService.disconnectOnboarding(req.user.organizationId);
   }
 
   @UseGuards(JwtAuthGuard)
