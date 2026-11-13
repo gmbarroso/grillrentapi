@@ -130,4 +130,31 @@ describe('OrganizationService', () => {
       }),
     );
   });
+
+  it('creates new organizations with their name visible', async () => {
+    organizationRepository.findOne.mockResolvedValue(null);
+    const result = await service.create({ name: 'Condominio Norte' });
+    expect(result.organization.showNameInSidebar).toBe(true);
+  });
+
+  it.each([false, true])('persists sidebar visibility %s without changing the name', async (visible) => {
+    organizationRepository.findOne.mockResolvedValue({
+      id: 'org-1', name: 'Original', showNameInSidebar: !visible,
+    });
+    const result = await service.updateById('org-1', { showNameInSidebar: visible });
+    expect(organizationRepository.findOne).toHaveBeenCalledWith({ where: { id: 'org-1' } });
+    expect(organizationRepository.save).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'org-1', name: 'Original', showNameInSidebar: visible,
+    }));
+    expect(result.showNameInSidebar).toBe(visible);
+  });
+
+  it('preserves hidden name preference when updating other fields', async () => {
+    organizationRepository.findOne.mockResolvedValue({
+      id: 'org-1', name: 'Original', showNameInSidebar: false,
+    });
+    const result = await service.updateById('org-1', { address: 'Rua A' });
+    expect(result.showNameInSidebar).toBe(false);
+    expect(result.name).toBe('Original');
+  });
 });
