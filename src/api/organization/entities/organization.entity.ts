@@ -9,6 +9,9 @@ export class Organization {
   @Column({ type: 'varchar', length: 120 })
   name!: string;
 
+  @Column({ type: 'boolean', default: true })
+  showNameInSidebar!: boolean;
+
   @Column({ type: 'varchar', length: 120 })
   slug!: string;
 

@@ -3,6 +3,7 @@ import { isDataImageUrl, isHttpUrl } from './logo-url.validation';
 
 export class UpdateOrganizationDto {
   name?: string;
+  showNameInSidebar?: boolean;
   address?: string | null;
   email?: string | null;
   phone?: string | null;
@@ -15,6 +16,7 @@ export class UpdateOrganizationDto {
 
 export const UpdateOrganizationSchema = Joi.object({
   name: Joi.string().trim().min(2).max(120).optional(),
+  showNameInSidebar: Joi.boolean().strict().optional(),
   address: Joi.string().max(1000).allow('', null).optional(),
   email: Joi.string().email().allow('', null).optional(),
   phone: Joi.string().max(40).allow('', null).optional(),
