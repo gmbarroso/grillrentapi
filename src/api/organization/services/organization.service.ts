@@ -25,6 +25,7 @@ export class OrganizationService {
 
     const organization = this.organizationRepository.create({
       name: normalizedName,
+      showNameInSidebar: true,
       slug,
       address: this.normalizeOptional(createOrganizationDto.address),
       email: this.normalizeOptional(createOrganizationDto.email),
@@ -78,6 +79,10 @@ export class OrganizationService {
         throw new BadRequestException('Organization name cannot be empty');
       }
       organization.name = normalizedName;
+    }
+
+    if (updateOrganizationDto.showNameInSidebar !== undefined) {
+      organization.showNameInSidebar = updateOrganizationDto.showNameInSidebar;
     }
 
     if (updateOrganizationDto.address !== undefined) {
